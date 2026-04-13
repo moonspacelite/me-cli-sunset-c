@@ -472,6 +472,7 @@ void handle_payment_menu(const char* B_CIAM, const char* B_API, const char* B_AU
 }
 
 int main() {
+    srand((unsigned int)time(NULL)); /* FIX: seed RNG agar IV di build_encrypted_field tidak deterministik */
     load_env(".env");
     const char* B_CIAM = getenv("BASE_CIAM_URL"); const char* B_API = getenv("BASE_API_URL");
     const char* B_AUTH = getenv("BASIC_AUTH"); const char* UA = getenv("UA");
