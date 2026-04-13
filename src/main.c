@@ -466,13 +466,14 @@ void handle_payment_menu(const char* B_CIAM, const char* B_API, const char* B_AU
         }
         
         if (strcmp(pay_choice, "1")==0 || strcmp(pay_choice, "2")==0 || strcmp(pay_choice, "3")==0 || strcmp(pay_choice, "0")==0) {
-            printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
+            printf("\nTekan Enter untuk melanjutkan..."); fflush(stdout);
+            flush_stdin();
         }
     }
 }
 
 int main() {
-    srand((unsigned int)time(NULL)); /* FIX: seed RNG agar IV di build_encrypted_field tidak deterministik */
+    srand((unsigned int)time(NULL));
     load_env(".env");
     const char* B_CIAM = getenv("BASE_CIAM_URL"); const char* B_API = getenv("BASE_API_URL");
     const char* B_AUTH = getenv("BASIC_AUTH"); const char* UA = getenv("UA");
@@ -544,7 +545,6 @@ int main() {
                     cmd[strcspn(cmd, "\n")] = 0; clean_input_string(cmd);
                     if (strcmp(cmd, "00") == 0 || strcmp(cmd, "99") == 0) break;
                     else if (strcmp(cmd, "0") == 0) {
-                        // Tampilan halaman login yang bersih
                         clear_screen();
                         printf("-------------------------------------------------------\n");
                         printf("              Login ke MyXL\n");
@@ -557,67 +557,59 @@ int main() {
                         char new_num[32];
                         if (fgets(new_num, sizeof(new_num), stdin) != NULL) {
                             new_num[strcspn(new_num, "\n")] = 0; clean_input_string(new_num);
+                            if (strcmp(new_num, "99") == 0 || strlen(new_num) == 0) continue;
+                            
+                            printf("\n[*] Mengirim OTP ke %s...\n", new_num);
+                            cJSON* otp_res = request_otp(B_CIAM, B_AUTH, UA, new_num);
+                            if (otp_res) cJSON_Delete(otp_res);
 
-                            // Opsi batal
-                            if (strcmp(new_num, "99") == 0) {
-                                // kembali ke menu akun
-                            } else if (strlen(new_num) == 0) {
-                                // input kosong, kembali saja
-                            } else {
-                                printf("\n[*] Mengirim OTP ke %s...\n", new_num);
-                                cJSON* otp_res = request_otp(B_CIAM, B_AUTH, UA, new_num);
-                                if (otp_res) cJSON_Delete(otp_res);
+                            printf("-------------------------------------------------------\n");
+                            printf("Masukan 6-digit OTP yang dikirim ke %s\n", new_num);
+                            printf("99. Batal\n");
+                            printf("-------------------------------------------------------\n");
+                            printf("OTP: "); fflush(stdout);
 
-                                printf("-------------------------------------------------------\n");
-                                printf("Masukan 6-digit OTP yang dikirim ke %s\n", new_num);
-                                printf("99. Batal\n");
-                                printf("-------------------------------------------------------\n");
-                                printf("OTP: "); fflush(stdout);
+                            char otp_code[10];
+                            if (fgets(otp_code, sizeof(otp_code), stdin) != NULL) {
+                                otp_code[strcspn(otp_code, "\n")] = 0; clean_input_string(otp_code);
+                                if (strcmp(otp_code, "99") == 0) {
+                                    printf("\n[!] Login dibatalkan.\n");
+                                    printf("Tekan Enter untuk melanjutkan..."); fflush(stdout); flush_stdin();
+                                } else {
+                                    printf("\n[*] Verifikasi OTP...\n");
+                                    cJSON* login_res = submit_otp(B_CIAM, B_AUTH, UA, AX_KEY ? AX_KEY : "dummy", new_num, otp_code);
+                                    if (login_res && cJSON_GetObjectItem(login_res, "refresh_token")) {
+                                        cJSON* rt_node = cJSON_GetObjectItem(login_res, "refresh_token"); const char* rt = (rt_node && cJSON_IsString(rt_node)) ? rt_node->valuestring : "";
+                                        cJSON* acc_node = cJSON_GetObjectItem(login_res, "access_token"); const char* acc = (acc_node && cJSON_IsString(acc_node)) ? acc_node->valuestring : "";
+                                        cJSON* idt_node = cJSON_GetObjectItem(login_res, "id_token"); const char* idt = (idt_node && cJSON_IsString(idt_node)) ? idt_node->valuestring : "";
 
-                                char otp_code[10];
-                                if (fgets(otp_code, sizeof(otp_code), stdin) != NULL) {
-                                    otp_code[strcspn(otp_code, "\n")] = 0; clean_input_string(otp_code);
-
-                                    if (strcmp(otp_code, "99") == 0) {
-                                        printf("\n[!] Login dibatalkan.\n");
-                                        printf("Tekan Enter untuk melanjutkan..."); flush_stdin();
-                                    } else {
-                                        printf("\n[*] Verifikasi OTP...\n");
-                                        cJSON* login_res = submit_otp(B_CIAM, B_AUTH, UA, AX_KEY ? AX_KEY : "dummy", new_num, otp_code);
-
-                                        if (login_res && cJSON_GetObjectItem(login_res, "refresh_token")) {
-                                            cJSON* rt_node = cJSON_GetObjectItem(login_res, "refresh_token"); const char* rt = (rt_node && cJSON_IsString(rt_node)) ? rt_node->valuestring : "";
-                                            cJSON* acc_node = cJSON_GetObjectItem(login_res, "access_token"); const char* acc = (acc_node && cJSON_IsString(acc_node)) ? acc_node->valuestring : "";
-                                            cJSON* idt_node = cJSON_GetObjectItem(login_res, "id_token"); const char* idt = (idt_node && cJSON_IsString(idt_node)) ? idt_node->valuestring : "";
-
-                                            char real_sub_type[32] = "PREPAID";
-                                            cJSON* prof_res = get_profile(B_API, API_KEY, XDATA_KEY, X_API_SEC, idt, acc);
-                                            if (prof_res) {
-                                                cJSON* p_data = cJSON_GetObjectItem(prof_res, "data");
-                                                if (p_data) {
-                                                    cJSON* profile = cJSON_GetObjectItem(p_data, "profile");
-                                                    if (profile) {
-                                                        cJSON* st = cJSON_GetObjectItem(profile, "subscription_type");
-                                                        if (st && cJSON_IsString(st)) strncpy(real_sub_type, st->valuestring, sizeof(real_sub_type)-1);
-                                                    }
+                                        char real_sub_type[32] = "PREPAID";
+                                        cJSON* prof_res = get_profile(B_API, API_KEY, XDATA_KEY, X_API_SEC, idt, acc);
+                                        if (prof_res) {
+                                            cJSON* p_data = cJSON_GetObjectItem(prof_res, "data");
+                                            if (p_data) {
+                                                cJSON* profile = cJSON_GetObjectItem(p_data, "profile");
+                                                if (profile) {
+                                                    cJSON* st = cJSON_GetObjectItem(profile, "subscription_type");
+                                                    if (st && cJSON_IsString(st)) strncpy(real_sub_type, st->valuestring, sizeof(real_sub_type)-1);
                                                 }
-                                                cJSON_Delete(prof_res);
                                             }
-
-                                            cJSON *new_acct = cJSON_CreateObject();
-                                            cJSON_AddNumberToObject(new_acct, "number", atof(new_num));
-                                            cJSON_AddStringToObject(new_acct, "subscription_type", real_sub_type);
-                                            cJSON_AddStringToObject(new_acct, "refresh_token", rt);
-                                            cJSON_AddItemToArray(tokens_arr, new_acct);
-                                            save_tokens(tokens_arr); active_account_idx = cJSON_GetArraySize(tokens_arr) - 1;
-                                            authenticate_and_fetch_balance(tokens_arr, B_CIAM, B_API, B_AUTH, UA, API_KEY, XDATA_KEY, X_API_SEC);
-                                            printf("\n[+] LOGIN BERHASIL!\n");
-                                        } else {
-                                            printf("\n[-] Login Gagal. Pastikan OTP benar dan tidak kedaluwarsa.\n");
+                                            cJSON_Delete(prof_res);
                                         }
-                                        if (login_res) cJSON_Delete(login_res);
-                                        printf("Tekan Enter untuk melanjutkan..."); flush_stdin();
+
+                                        cJSON *new_acct = cJSON_CreateObject();
+                                        cJSON_AddNumberToObject(new_acct, "number", atof(new_num));
+                                        cJSON_AddStringToObject(new_acct, "subscription_type", real_sub_type);
+                                        cJSON_AddStringToObject(new_acct, "refresh_token", rt);
+                                        cJSON_AddItemToArray(tokens_arr, new_acct);
+                                        save_tokens(tokens_arr); active_account_idx = cJSON_GetArraySize(tokens_arr) - 1;
+                                        authenticate_and_fetch_balance(tokens_arr, B_CIAM, B_API, B_AUTH, UA, API_KEY, XDATA_KEY, X_API_SEC);
+                                        printf("\n[+] LOGIN BERHASIL!\n");
+                                    } else {
+                                        printf("\n[-] Login Gagal. Pastikan OTP benar dan tidak kedaluwarsa.\n");
                                     }
+                                    if (login_res) cJSON_Delete(login_res);
+                                    printf("Tekan Enter untuk melanjutkan..."); fflush(stdout); flush_stdin();
                                 }
                             }
                         }
@@ -643,7 +635,7 @@ int main() {
             }
         } 
         else if (strcmp(choice, "2") == 0) {
-            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); flush_stdin(); continue; }
+            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); fflush(stdout); flush_stdin(); continue; }
             
             int goto_main = 0;
             while (1) {
@@ -740,13 +732,10 @@ int main() {
                     if (strcmp(p_cmd, "00") == 0 || strcmp(p_cmd, "99") == 0) break;
                     
                     if (strncmp(p_cmd, "del ", 4) == 0) {
-                        // FIX: parsing nomor setelah "del " dengan trim spasi ekstra
                         const char* num_str = p_cmd + 4;
-                        while (*num_str == ' ') num_str++; // skip leading spaces
+                        while (*num_str == ' ') num_str++;
                         int del_idx = -1;
-                        if (*num_str >= '1' && *num_str <= '9') {
-                            del_idx = atoi(num_str) - 1;
-                        }
+                        if (*num_str >= '1' && *num_str <= '9') del_idx = atoi(num_str) - 1;
                         if (del_idx >= 0 && del_idx < active_pkg_count) {
                             printf("-------------------------------------------------------\n");
                             printf("Yakin ingin berhenti langganan paket:\n%d. %s ?\n", del_idx + 1, active_pkgs[del_idx].name);
@@ -767,10 +756,10 @@ int main() {
                                     cJSON_Delete(u_res);
                                 }
                             } else { printf("[!] Dibatalkan.\n"); }
-                            printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
+                            printf("\nTekan Enter untuk melanjutkan..."); fflush(stdout); flush_stdin();
                         } else {
                             printf("[-] Nomor paket tidak valid. Masukkan angka 1 sampai %d.\n", active_pkg_count);
-                            printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
+                            printf("\nTekan Enter untuk melanjutkan..."); fflush(stdout); flush_stdin();
                         }
                     } else {
                         int sel_idx = atoi(p_cmd) - 1;
@@ -793,12 +782,12 @@ int main() {
                                 handle_payment_menu(B_CIAM, B_API, B_AUTH, UA, API_KEY, XDATA_KEY, X_API_SEC, ENC_FIELD_KEY, tokens_arr, active_pkgs[sel_idx].quota_code, price, name, conf, p_for, NULL, &goto_main);
                             } else {
                                 printf("[-] Gagal mengambil detail paket.\n");
-                                printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
+                                printf("\nTekan Enter untuk melanjutkan..."); fflush(stdout); flush_stdin();
                             }
                             if (d_res) cJSON_Delete(d_res);
                         } else {
                             printf("[-] Nomor paket tidak valid. Masukkan angka 1 sampai %d.\n", active_pkg_count);
-                            printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
+                            printf("\nTekan Enter untuk melanjutkan..."); fflush(stdout); flush_stdin();
                         }
                     }
                 }
@@ -806,16 +795,16 @@ int main() {
             }
         }
         else if (strcmp(choice, "3") == 0) {
-            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); flush_stdin(); continue; }
+            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); fflush(stdout); flush_stdin(); continue; }
             
             FILE *f = fopen("hot_data/hot.json", "r");
-            if (!f) { printf("\n[-] File hot_data/hot.json tidak ditemukan!\nTekan Enter..."); flush_stdin(); continue; }
+            if (!f) { printf("\n[-] File hot_data/hot.json tidak ditemukan!\nTekan Enter..."); fflush(stdout); flush_stdin(); continue; }
             fseek(f, 0, SEEK_END); long fsize = ftell(f); fseek(f, 0, SEEK_SET);
             char *json_data = malloc(fsize + 1); fread(json_data, 1, fsize, f); fclose(f); json_data[fsize] = 0;
             
             sanitize_json_string(json_data);
             cJSON* hot_arr = cJSON_Parse(json_data); free(json_data);
-            if (!hot_arr || !cJSON_IsArray(hot_arr)) { printf("\n[-] Gagal memparsing hot.json\nTekan Enter..."); flush_stdin(); continue; }
+            if (!hot_arr || !cJSON_IsArray(hot_arr)) { printf("\n[-] Gagal memparsing hot.json\nTekan Enter..."); fflush(stdout); flush_stdin(); continue; }
             
             int goto_main = 0;
             while (1) {
@@ -886,17 +875,17 @@ int main() {
                                         handle_payment_menu(B_CIAM, B_API, B_AUTH, UA, API_KEY, XDATA_KEY, X_API_SEC, ENC_FIELD_KEY, tokens_arr, target_opt_code, price, name, conf, p_for, selected_bm, &goto_main);
                                     } else {
                                         printf("[-] Gagal mengambil detail paket.\n");
-                                        printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
+                                        printf("\nTekan Enter untuk melanjutkan..."); fflush(stdout); flush_stdin();
                                     }
                                     if (d_res) cJSON_Delete(d_res);
                                 } else {
                                     printf("[-] Varian/Order tidak ditemukan di Family tersebut.\n");
-                                    printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
+                                    printf("\nTekan Enter untuk melanjutkan..."); fflush(stdout); flush_stdin();
                                 }
                                 cJSON_Delete(fam_res);
                             } else {
                                 printf("[-] Gagal mengambil data Family Code.\n");
-                                printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
+                                printf("\nTekan Enter untuk melanjutkan..."); fflush(stdout); flush_stdin();
                             }
                         }
                     }
@@ -906,7 +895,7 @@ int main() {
             cJSON_Delete(hot_arr);
         }
         else if (strcmp(choice, "4") == 0) {
-            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); flush_stdin(); continue; }
+            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); fflush(stdout); flush_stdin(); continue; }
             char f_code[256]; printf("\nMasukkan Family Code: "); fflush(stdout);
             if (fgets(f_code, sizeof(f_code), stdin) != NULL) {
                 f_code[strcspn(f_code, "\n")] = 0; clean_input_string(f_code);
@@ -996,12 +985,12 @@ int main() {
                                     handle_payment_menu(B_CIAM, B_API, B_AUTH, UA, API_KEY, XDATA_KEY, X_API_SEC, ENC_FIELD_KEY, tokens_arr, codes[sel], price, name, conf, p_for, bm_infos[sel], &goto_main);
                                 } else {
                                     printf("[-] Gagal mengambil detail paket.\n");
-                                    printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
+                                    printf("\nTekan Enter untuk melanjutkan..."); fflush(stdout); flush_stdin();
                                 }
                                 if (d_res) cJSON_Delete(d_res);
                             } else {
                                 printf("Invalid package number.\n");
-                                printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
+                                printf("\nTekan Enter untuk melanjutkan..."); fflush(stdout); flush_stdin();
                             }
                         }
                         for(int i=1; i<opt_num; i++) { if(bm_infos[i]) cJSON_Delete(bm_infos[i]); }
@@ -1010,63 +999,46 @@ int main() {
                     cJSON_Delete(fam_res);
                 } else { 
                     printf("[-] Gagal mengambil data Family Code. Pastikan kode benar.\n"); 
-                    printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
+                    printf("\nTekan Enter untuk melanjutkan..."); fflush(stdout); flush_stdin();
                 }
             }
         }
         else if (strcmp(choice, "5") == 0) {
-            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); flush_stdin(); continue; }
+            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); fflush(stdout); flush_stdin(); continue; }
 
-            // FIX: Hapus flush_stdin() yang menyebabkan double enter.
-            // --- Tampilan form input bersih ---
             clear_screen();
             printf("=======================================================\n");
             printf("       Beli Semua Paket di Family Code (Loop)\n");
             printf("=======================================================\n");
 
-            // Input Family Code
             char f_code[256] = {0};
             printf("Family Code  : "); fflush(stdout);
             if (fgets(f_code, sizeof(f_code), stdin) == NULL) { continue; }
             f_code[strcspn(f_code, "\n")] = 0; clean_input_string(f_code);
             if (strlen(f_code) == 0) {
                 printf("[-] Family Code tidak boleh kosong.\n");
-                printf("\nTekan Enter untuk kembali..."); flush_stdin(); continue;
+                printf("\nTekan Enter untuk kembali..."); fflush(stdout); flush_stdin(); continue;
             }
 
-            // Input mulai dari opsi nomor berapa
             char start_str[10] = "1";
             printf("Mulai dari opsi nomor (default 1): "); fflush(stdout);
-            if (fgets(start_str, sizeof(start_str), stdin) != NULL) {
-                start_str[strcspn(start_str, "\n")] = 0;
-            }
-            int start_opt = atoi(start_str);
-            if (start_opt < 1) start_opt = 1;
+            if (fgets(start_str, sizeof(start_str), stdin) != NULL) start_str[strcspn(start_str, "\n")] = 0;
+            int start_opt = atoi(start_str); if (start_opt < 1) start_opt = 1;
 
-            // Input gunakan decoy?
             char use_decoy_str[10] = "n";
             printf("Gunakan paket decoy? (y/n): "); fflush(stdout);
-            if (fgets(use_decoy_str, sizeof(use_decoy_str), stdin) != NULL) {
-                use_decoy_str[strcspn(use_decoy_str, "\n")] = 0;
-            }
+            if (fgets(use_decoy_str, sizeof(use_decoy_str), stdin) != NULL) use_decoy_str[strcspn(use_decoy_str, "\n")] = 0;
             int use_decoy = (use_decoy_str[0] == 'y' || use_decoy_str[0] == 'Y') ? 1 : 0;
 
-            // Input pause setiap transaksi?
             char pause_str[10] = "n";
             printf("Jeda/Pause setiap transaksi berhasil? (y/n): "); fflush(stdout);
-            if (fgets(pause_str, sizeof(pause_str), stdin) != NULL) {
-                pause_str[strcspn(pause_str, "\n")] = 0;
-            }
+            if (fgets(pause_str, sizeof(pause_str), stdin) != NULL) pause_str[strcspn(pause_str, "\n")] = 0;
             int do_pause = (pause_str[0] == 'y' || pause_str[0] == 'Y') ? 1 : 0;
 
-            // Input delay antar transaksi
             char delay_str[10] = "0";
             printf("Delay antar transaksi (detik, 0 = tanpa delay): "); fflush(stdout);
-            if (fgets(delay_str, sizeof(delay_str), stdin) != NULL) {
-                delay_str[strcspn(delay_str, "\n")] = 0;
-            }
-            int delay_sec = atoi(delay_str);
-            if (delay_sec < 0) delay_sec = 0;
+            if (fgets(delay_str, sizeof(delay_str), stdin) != NULL) delay_str[strcspn(delay_str, "\n")] = 0;
+            int delay_sec = atoi(delay_str); if (delay_sec < 0) delay_sec = 0;
 
             printf("-------------------------------------------------------\n");
             printf("Family Code  : %s\n", f_code);
@@ -1077,12 +1049,10 @@ int main() {
             printf("-------------------------------------------------------\n");
             printf("Lanjutkan? (y/n): "); fflush(stdout);
             char go_str[10] = "n";
-            if (fgets(go_str, sizeof(go_str), stdin) != NULL) {
-                go_str[strcspn(go_str, "\n")] = 0;
-            }
+            if (fgets(go_str, sizeof(go_str), stdin) != NULL) go_str[strcspn(go_str, "\n")] = 0;
             if (go_str[0] != 'y' && go_str[0] != 'Y') {
                 printf("[!] Dibatalkan.\n");
-                printf("\nTekan Enter untuk kembali..."); flush_stdin(); continue;
+                printf("\nTekan Enter untuk kembali..."); fflush(stdout); flush_stdin(); continue;
             }
 
             printf("\n[*] Menarik data keluarga paket (Bruteforce Mode)...\n");
@@ -1108,13 +1078,12 @@ int main() {
 
             if (!fam_res || !found) {
                 printf("[-] Gagal mengambil data Family Code. Pastikan kode benar.\n");
-                printf("\nTekan Enter untuk kembali..."); flush_stdin(); continue;
+                printf("\nTekan Enter untuk kembali..."); fflush(stdout); flush_stdin(); continue;
             }
 
             cJSON* data5 = cJSON_GetObjectItem(fam_res, "data");
             cJSON* variants5 = cJSON_GetObjectItem(data5, "package_variants");
 
-            // Ambil decoy package jika diperlukan
             int dec_price = 0;
             char dec_name_buf[256] = {0};
             char dec_conf_buf[512] = {0};
@@ -1141,23 +1110,20 @@ int main() {
                     printf("Pastikan sisa balance KURANG DARI Rp %d !!!\n", dec_price);
                     printf("Apakah anda yakin ingin melanjutkan? (y/n): "); fflush(stdout);
                     char conf5[10] = "n";
-                    if (fgets(conf5, sizeof(conf5), stdin) != NULL) {
-                        conf5[strcspn(conf5, "\n")] = 0;
-                    }
+                    if (fgets(conf5, sizeof(conf5), stdin) != NULL) conf5[strcspn(conf5, "\n")] = 0;
                     if (conf5[0] != 'y' && conf5[0] != 'Y') {
                         printf("[!] Pembelian dibatalkan.\n");
                         cJSON_Delete(decoy5); cJSON_Delete(fam_res);
-                        printf("\nTekan Enter untuk kembali..."); flush_stdin(); continue;
+                        printf("\nTekan Enter untuk kembali..."); fflush(stdout); flush_stdin(); continue;
                     }
                 } else {
                     printf("[-] Gagal memancing paket Decoy.\n");
                     if (decoy5) cJSON_Delete(decoy5);
                     cJSON_Delete(fam_res);
-                    printf("\nTekan Enter untuk kembali..."); flush_stdin(); continue;
+                    printf("\nTekan Enter untuk kembali..."); fflush(stdout); flush_stdin(); continue;
                 }
             }
 
-            // Loop pembelian semua opsi
             int success_count = 0;
             cJSON* var5; cJSON_ArrayForEach(var5, variants5) {
                 cJSON* vname_node = cJSON_GetObjectItem(var5, "name");
@@ -1238,7 +1204,7 @@ int main() {
                     }
 
                     if (do_pause) {
-                        printf("Tekan Enter untuk lanjut ke opsi berikutnya..."); flush_stdin();
+                        printf("Tekan Enter untuk lanjut ke opsi berikutnya..."); fflush(stdout); flush_stdin();
                     }
                     if (delay_sec > 0) {
                         printf("[~] Menunggu %d detik...\n", delay_sec);
@@ -1255,25 +1221,23 @@ int main() {
             printf("\n=======================================================\n");
             printf("Loop selesai. Total transaksi berhasil: %d\n", success_count);
             printf("=======================================================\n");
-            printf("Tekan Enter untuk kembali ke menu utama..."); flush_stdin();
+            printf("Tekan Enter untuk kembali ke menu utama..."); fflush(stdout); flush_stdin();
         }
         else if (strcmp(choice, "00") == 0) {
-            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); flush_stdin(); continue; }
+            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); fflush(stdout); flush_stdin(); continue; }
 
             int goto_main = 0;
             while (1) {
-                // Baca bookmark.json setiap loop agar fresh setelah delete
                 FILE *fbm = fopen("bookmark.json", "r");
-                if (!fbm) { printf("\n[-] Belum ada bookmark tersimpan.\nTekan Enter..."); flush_stdin(); break; }
+                if (!fbm) { printf("\n[-] Belum ada bookmark tersimpan.\nTekan Enter..."); fflush(stdout); flush_stdin(); break; }
                 fseek(fbm, 0, SEEK_END); long fbm_size = ftell(fbm); fseek(fbm, 0, SEEK_SET);
                 char *bm_json = malloc(fbm_size + 1); fread(bm_json, 1, fbm_size, fbm); fclose(fbm); bm_json[fbm_size] = 0;
                 sanitize_json_string(bm_json);
                 cJSON* bm_arr = cJSON_Parse(bm_json); free(bm_json);
                 if (!bm_arr || !cJSON_IsArray(bm_arr) || cJSON_GetArraySize(bm_arr) == 0) {
-                    printf("\n[-] Bookmark kosong.\nTekan Enter..."); if (bm_arr) cJSON_Delete(bm_arr); flush_stdin(); break;
+                    printf("\n[-] Bookmark kosong.\nTekan Enter..."); if (bm_arr) cJSON_Delete(bm_arr); fflush(stdout); flush_stdin(); break;
                 }
 
-                // Tampilan bookmark bersih
                 clear_screen();
                 int bm_count = cJSON_GetArraySize(bm_arr);
                 printf("-------------------------------------------------------\n");
@@ -1303,7 +1267,6 @@ int main() {
                     cJSON_Delete(bm_arr); break;
                 }
 
-                // Mode hapus bookmark
                 if (strcmp(b_choice, "0") == 0) {
                     clear_screen();
                     printf("-------------------------------------------------------\n");
@@ -1341,21 +1304,20 @@ int main() {
                                 } else {
                                     printf("[!] Dibatalkan.\n");
                                 }
-                                printf("Tekan Enter untuk melanjutkan..."); flush_stdin();
+                                printf("Tekan Enter untuk melanjutkan..."); fflush(stdout); flush_stdin();
                             } else {
                                 printf("[-] Nomor tidak valid.\n");
-                                printf("Tekan Enter untuk melanjutkan..."); flush_stdin();
+                                printf("Tekan Enter untuk melanjutkan..."); fflush(stdout); flush_stdin();
                             }
                         }
                     }
                     cJSON_Delete(bm_arr);
-                    continue; // refresh tampilan bookmark
+                    continue;
                 }
 
-                // Pilih bookmark untuk dibeli
                 int sel_bm = atoi(b_choice);
                 if (sel_bm < 1 || sel_bm > bm_count) {
-                    printf("[-] Nomor tidak valid.\nTekan Enter..."); flush_stdin();
+                    printf("[-] Nomor tidak valid.\nTekan Enter..."); fflush(stdout); flush_stdin();
                     cJSON_Delete(bm_arr); continue;
                 }
 
@@ -1366,7 +1328,7 @@ int main() {
                 cJSON* ord_item = cJSON_GetObjectItem(selected_bm, "order");
 
                 if (!fc_item || !vn_item || !ord_item) {
-                    printf("[-] Data bookmark tidak lengkap.\nTekan Enter..."); flush_stdin();
+                    printf("[-] Data bookmark tidak lengkap.\nTekan Enter..."); fflush(stdout); flush_stdin();
                     cJSON_Delete(bm_arr); continue;
                 }
 
@@ -1379,11 +1341,10 @@ int main() {
                 cJSON* bm_fam = do_family_bruteforce(B_API, API_KEY, XDATA_KEY, X_API_SEC, id_tok, bm_fcode, bm_is_ent, NULL);
 
                 if (!bm_fam) {
-                    printf("[-] Gagal menarik data Family Code.\nTekan Enter..."); flush_stdin();
+                    printf("[-] Gagal menarik data Family Code.\nTekan Enter..."); fflush(stdout); flush_stdin();
                     cJSON_Delete(bm_arr); continue;
                 }
 
-                // Cari option code dari variant + order
                 char bm_opt_code[256] = {0};
                 cJSON* bm_data  = cJSON_GetObjectItem(bm_fam, "data");
                 cJSON* bm_vars  = cJSON_GetObjectItem(bm_data, "package_variants");
@@ -1405,14 +1366,14 @@ int main() {
                 }
 
                 if (strlen(bm_opt_code) == 0) {
-                    printf("[-] Varian/Order tidak ditemukan. Paket mungkin tidak tersedia.\nTekan Enter..."); flush_stdin();
+                    printf("[-] Varian/Order tidak ditemukan. Paket mungkin tidak tersedia.\nTekan Enter..."); fflush(stdout); flush_stdin();
                     cJSON_Delete(bm_fam); cJSON_Delete(bm_arr); continue;
                 }
 
                 printf("\n[*] Mengambil detail untuk transaksi...\n");
                 cJSON* bm_dres = get_package_detail(B_API, API_KEY, XDATA_KEY, X_API_SEC, id_tok, bm_opt_code);
                 if (!bm_dres || !cJSON_GetObjectItem(bm_dres, "data")) {
-                    printf("[-] Gagal mengambil detail paket. Mungkin sudah tidak tersedia.\nTekan Enter..."); flush_stdin();
+                    printf("[-] Gagal mengambil detail paket. Mungkin sudah tidak tersedia.\nTekan Enter..."); fflush(stdout); flush_stdin();
                     if (bm_dres) cJSON_Delete(bm_dres); cJSON_Delete(bm_fam); cJSON_Delete(bm_arr); continue;
                 }
 
