@@ -1,0 +1,59 @@
+name: Cross Compile OpenWRT ARM (EA6350)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget tar make xz-utils
+
+      - name: Download OpenWRT SDK (ipq40xx - EA6350)
+        run: |
+          wget -q https://downloads.openwrt.org/releases/23.05.3/targets/ipq40xx/generic/openwrt-sdk-23.05.3-ipq40xx-generic_gcc-12.3.0_musl_eabi.Linux-x86_64.tar.xz
+          tar -xf openwrt-sdk-*.tar.xz
+          mv openwrt-sdk-* openwrt-sdk
+
+      - name: Set toolchain path
+        run: |
+          echo "TOOLCHAIN=$PWD/openwrt-sdk/staging_dir/toolchain-arm_cortex-a7+neon-vfpv4_gcc-12.3.0_musl_eabi/bin" >> $GITHUB_ENV
+          echo "STAGING_DIR=$PWD/openwrt-sdk/staging_dir" >> $GITHUB_ENV
+
+      - name: Install cross-compiled libraries (curl, openssl)
+        run: |
+          export PATH=$TOOLCHAIN:$PATH
+          export STAGING_DIR=$STAGING_DIR
+          # Gunakan library yang sudah ada di SDK
+          ls $PWD/openwrt-sdk/staging_dir/target-arm_cortex-a7+neon-vfpv4_musl_eabi/usr/lib/ || true
+
+      - name: Build
+        run: |
+          export PATH=$TOOLCHAIN:$PATH
+          export STAGING_DIR=$STAGING_DIR
+          export SDK_TARGET=$PWD/openwrt-sdk/staging_dir/target-arm_cortex-a7+neon-vfpv4_musl_eabi/usr
+          make \
+            CC=arm-openwrt-linux-muslgnueabi-gcc \
+            CFLAGS="-Wall -I./include -I$SDK_TARGET/include" \
+            LDFLAGS="-L$SDK_TARGET/lib -lssl -lcrypto -lcurl -lm"
+
+      - name: Verify binary
+        run: |
+          file me_cli
+          ls -lh me_cli
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: me_cli-openwrt-arm
+          path: me_cli
+          retention-days: 30
