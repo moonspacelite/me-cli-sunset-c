@@ -1,8 +1,8 @@
-name: Cross Compile OpenWRT ARM (EA6350)
+name: Build for OpenWrt ARM Cortex-A7
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -13,33 +13,120 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Add armhf architecture
+      - name: Install zig dan tools
         run: |
-          sudo dpkg --add-architecture armhf
-          sudo apt-get update
+          sudo apt-get update -qq
+          sudo apt-get install -y wget make perl
 
-      - name: Install cross-compiler dan libraries
-        run: |
-          sudo apt-get install -y \
-            gcc-arm-linux-gnueabihf \
-            libssl-dev:armhf \
-            libcurl4-openssl-dev:armhf
+          cd /tmp
+          wget -q https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz
+          tar -xf zig-linux-x86_64-0.13.0.tar.xz
+          echo "/tmp/zig-linux-x86_64-0.13.0" >> $GITHUB_PATH
 
-      - name: Build
+      - name: Buat zig wrapper scripts
         run: |
-          make \
-            CC=arm-linux-gnueabihf-gcc \
-            CFLAGS="-Wall -I./include" \
-            LDFLAGS="-lssl -lcrypto -lcurl -lm"
+          cat > /tmp/zigcc << 'EOF'
+          #!/bin/sh
+          exec zig cc -target arm-linux-musleabihf -mcpu=cortex_a7 "$@"
+          EOF
 
-      - name: Verify binary
+          cat > /tmp/zigar << 'EOF'
+          #!/bin/sh
+          exec zig ar "$@"
+          EOF
+
+          cat > /tmp/zigranlib << 'EOF'
+          #!/bin/sh
+          exec zig ranlib "$@"
+          EOF
+
+          chmod +x /tmp/zigcc /tmp/zigar /tmp/zigranlib
+
+          echo 'int main(){return 0;}' > /tmp/test.c
+          /tmp/zigcc /tmp/test.c -o /tmp/test_arm
+          file /tmp/test_arm
+          echo "Zig wrapper OK"
+
+      - name: Build OpenSSL static for ARM musl
         run: |
+          PREFIX=/tmp/arm-sysroot
+          mkdir -p $PREFIX
+
+          cd /tmp
+          wget -q https://github.com/openssl/openssl/releases/download/openssl-3.3.2/openssl-3.3.2.tar.gz
+          tar -xzf openssl-3.3.2.tar.gz
+          cd openssl-3.3.2
+
+          CC=/tmp/zigcc \
+          AR=/tmp/zigar \
+          RANLIB=/tmp/zigranlib \
+          ./Configure linux-armv4 \
+            --prefix=$PREFIX \
+            no-shared no-tests no-apps no-asm
+
+          make -j$(nproc) build_libs
+          make install_dev
+          echo "=== OpenSSL OK ==="
+          ls $PREFIX/lib/libssl.a $PREFIX/lib/libcrypto.a
+
+      - name: Build curl static for ARM musl
+        run: |
+          PREFIX=/tmp/arm-sysroot
+
+          cd /tmp
+          wget -q https://curl.se/download/curl-8.10.1.tar.gz
+          tar -xzf curl-8.10.1.tar.gz
+          cd curl-8.10.1
+
+          ./configure \
+            --host=arm-linux-gnueabihf \
+            --prefix=$PREFIX \
+            CC="/tmp/zigcc" \
+            AR="/tmp/zigar" \
+            RANLIB="/tmp/zigranlib" \
+            CPPFLAGS="-I$PREFIX/include" \
+            LDFLAGS="-L$PREFIX/lib" \
+            LIBS="-lssl -lcrypto -ldl -lpthread" \
+            --with-openssl=$PREFIX \
+            --disable-shared --enable-static \
+            --disable-ldap --disable-ldaps \
+            --disable-rtsp --disable-dict \
+            --disable-telnet --disable-tftp \
+            --disable-pop3 --disable-imap \
+            --disable-smb --disable-smtp \
+            --disable-gopher --disable-mqtt \
+            --without-libidn2 --without-librtmp \
+            --without-libpsl \
+            --disable-docs --disable-manual
+
+          make -j$(nproc)
+          make install
+          echo "=== curl OK ==="
+          ls $PREFIX/lib/libcurl.a
+
+      - name: Compile me_cli
+        run: |
+          PREFIX=/tmp/arm-sysroot
+          SRC=$(find src -name "*.c" | tr '\n' ' ')
+
+          /tmp/zigcc \
+            -Os \
+            -I./include \
+            -I${PREFIX}/include \
+            -Wno-unused-result \
+            -Wno-misleading-indentation \
+            ${SRC} \
+            -o me_cli \
+            -L${PREFIX}/lib \
+            -lcurl -lssl -lcrypto -lm -lpthread -ldl
+
+          echo "=== Binary ==="
           file me_cli
           ls -lh me_cli
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: me_cli-openwrt-arm
+          name: me_cli-arm-cortex-a7-static
           path: me_cli
           retention-days: 30
