@@ -126,56 +126,69 @@ jobs:
 
       # =========================================================
       # Package sebagai OpenWrt APK v3 (arm_cortex-a7)
-      # FIX: Semua operasi dilakukan di $GITHUB_WORKSPACE agar
-      #      upload-artifact bisa menemukannya dengan path relatif.
-      # Install di OpenWrt: apk add --allow-untrusted engsel.apk
+      #
+      # Format APK v3 = DUAN gzip stream dikoncatenasi:
+      #   Stream 1: tar.gz berisi .PKGINFO (control metadata)
+      #   Stream 2: tar.gz berisi file-file paket (usr/bin/engsel)
+      #
+      # Bukan sekedar tar.gz biasa! OpenWrt 25.x menolak format lama.
+      # Install: apk add --allow-untrusted /tmp/engsel.apk
       # =========================================================
-      - name: Package sebagai OpenWrt .apk
+      - name: Package sebagai OpenWrt APK v3
         run: |
           PKG_NAME="engsel"
           PKG_VER="1.0.0"
+          PKG_REL="r0"
           PKG_ARCH="arm_cortex-a7"
-          PKG_DESC="CLI client for XL Axiata (me-cli-sunset port to C)"
-          PKG_URL="https://github.com/${{ github.repository }}"
           BUILD_DATE=$(date +%s)
           INSTALL_SIZE=$(stat -c%s engsel)
           APK_FILENAME="${PKG_NAME}-${PKG_VER}-${PKG_ARCH}.apk"
 
-          # Buat staging dir di dalam workspace (bukan /tmp!)
-          mkdir -p dist/usr/bin
-          cp engsel dist/usr/bin/engsel
-          chmod 755 dist/usr/bin/engsel
-
-          # .PKGINFO — wajib ada, dibaca oleh apk tool OpenWrt
-          cat > dist/.PKGINFO << EOF
+          # --- Buat Control Stream ---
+          mkdir -p /tmp/ctrl
+          cat > /tmp/ctrl/.PKGINFO << EOF
           pkgname = ${PKG_NAME}
-          pkgver = ${PKG_VER}-r0
+          pkgver = ${PKG_VER}-${PKG_REL}
           arch = ${PKG_ARCH}
           size = ${INSTALL_SIZE}
-          pkgdesc = ${PKG_DESC}
-          url = ${PKG_URL}
+          pkgdesc = CLI client for XL Axiata (me-cli-sunset port to C)
+          url = https://github.com/${{ github.repository }}
           builddate = ${BUILD_DATE}
           packager = GitHub Actions
           EOF
 
-          # Post-install script (opsional)
-          cat > dist/.post-install << 'SCRIPT'
-          #!/bin/sh
-          echo "[engsel] Installed! Jalankan: cd /root && engsel"
-          echo "[engsel] Pastikan file .env ada di direktori kerja."
-          SCRIPT
-          chmod +x dist/.post-install
+          # Tar+gzip control — cd ke dalam folder agar path bersih
+          cd /tmp/ctrl
+          tar -czf /tmp/control.tar.gz .PKGINFO
+          cd $GITHUB_WORKSPACE
 
-          # Build .apk — tar dari dalam folder dist agar path tidak include "dist/"
-          cd dist
-          tar -czf "../${APK_FILENAME}" .PKGINFO .post-install usr/
-          cd ..
+          # --- Buat Data Stream ---
+          mkdir -p /tmp/data/usr/bin
+          cp engsel /tmp/data/usr/bin/engsel
+          chmod 755 /tmp/data/usr/bin/engsel
 
-          echo "=== APK Package ==="
+          # Tar+gzip data — path harus usr/bin/engsel (tanpa ./)
+          cd /tmp/data
+          tar -czf /tmp/data.tar.gz usr/
+          cd $GITHUB_WORKSPACE
+
+          # --- Gabungkan dua stream → APK v3 ---
+          cat /tmp/control.tar.gz /tmp/data.tar.gz > "${APK_FILENAME}"
+
+          echo "=== APK v3 Package ==="
           ls -lh "${APK_FILENAME}"
-          echo ""
-          echo "=== Contents ==="
-          tar -tzf "${APK_FILENAME}"
+
+          # Verifikasi dua gzip member di top-level
+          CTRL_SIZE=$(stat -c%s /tmp/control.tar.gz)
+          python3 -c "
+          data = open('${APK_FILENAME}','rb').read()
+          ctrl = $CTRL_SIZE
+          s1ok = data[0]==0x1f and data[1]==0x8b
+          s2ok = data[ctrl]==0x1f and data[ctrl+1]==0x8b
+          print(f'Stream 1 (control) @ offset 0: {\"OK\" if s1ok else \"FAIL\"}')
+          print(f'Stream 2 (data)    @ offset {ctrl}: {\"OK\" if s2ok else \"FAIL\"}')
+          print('APK v3 format: OK' if s1ok and s2ok else 'APK v3 format: ERROR')
+          "
 
       - name: Upload binary (raw)
         uses: actions/upload-artifact@v4
@@ -184,11 +197,9 @@ jobs:
           path: engsel
           retention-days: 30
 
-      - name: Upload OpenWrt APK package
+      - name: Upload OpenWrt APK v3 package
         uses: actions/upload-artifact@v4
         with:
           name: engsel-openwrt-apk-arm_cortex-a7
-          # Path relatif terhadap GITHUB_WORKSPACE — sekarang file ada di sini
           path: engsel-1.0.0-arm_cortex-a7.apk
           retention-days: 30
-          
