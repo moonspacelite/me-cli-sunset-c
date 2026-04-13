@@ -360,7 +360,7 @@ void handle_payment_menu(const char* B_CIAM, const char* B_API, const char* B_AU
         }
         else if (strcmp(pay_choice, "1") == 0) {
             printf("Total amount is %d.\n", price);
-            printf("Enter new amount if you need to overwrite.\nPress enter to ignore & use default amount: ");
+            printf("Enter new amount if you need to overwrite.\nPress enter to ignore & use default amount: "); fflush(stdout);
             char ow_str[32]; int final_price = price;
             if (fgets(ow_str, sizeof(ow_str), stdin) != NULL) {
                 ow_str[strcspn(ow_str, "\n")] = 0; clean_input_string(ow_str);
@@ -466,7 +466,7 @@ void handle_payment_menu(const char* B_CIAM, const char* B_API, const char* B_AU
         }
         
         if (strcmp(pay_choice, "1")==0 || strcmp(pay_choice, "2")==0 || strcmp(pay_choice, "3")==0 || strcmp(pay_choice, "0")==0) {
-            printf("\nTekan Enter untuk melanjutkan..."); int temp_c = getchar(); (void)temp_c;
+            printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
         }
     }
 }
@@ -580,7 +580,7 @@ int main() {
 
                                     if (strcmp(otp_code, "99") == 0) {
                                         printf("\n[!] Login dibatalkan.\n");
-                                        printf("Tekan Enter untuk melanjutkan..."); int temp = getchar(); (void)temp;
+                                        printf("Tekan Enter untuk melanjutkan..."); flush_stdin();
                                     } else {
                                         printf("\n[*] Verifikasi OTP...\n");
                                         cJSON* login_res = submit_otp(B_CIAM, B_AUTH, UA, AX_KEY ? AX_KEY : "dummy", new_num, otp_code);
@@ -616,7 +616,7 @@ int main() {
                                             printf("\n[-] Login Gagal. Pastikan OTP benar dan tidak kedaluwarsa.\n");
                                         }
                                         if (login_res) cJSON_Delete(login_res);
-                                        printf("Tekan Enter untuk melanjutkan..."); int temp = getchar(); (void)temp;
+                                        printf("Tekan Enter untuk melanjutkan..."); flush_stdin();
                                     }
                                 }
                             }
@@ -643,7 +643,7 @@ int main() {
             }
         } 
         else if (strcmp(choice, "2") == 0) {
-            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); int temp = getchar(); (void)temp; continue; }
+            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); flush_stdin(); continue; }
             
             int goto_main = 0;
             while (1) {
@@ -733,7 +733,7 @@ int main() {
                     cJSON_Delete(quota_res);
                 }
                 
-                printf("Input nomor paket untuk lihat detail.\nInput del <nomor paket> untuk berhenti langganan.\n00. Kembali ke menu utama\nPilihan: ");
+                printf("Input nomor paket untuk lihat detail.\nInput del <nomor paket> untuk berhenti langganan.\n00. Kembali ke menu utama\nPilihan: "); fflush(stdout);
                 char p_cmd[64];
                 if (fgets(p_cmd, sizeof(p_cmd), stdin) != NULL) {
                     p_cmd[strcspn(p_cmd, "\n")] = 0; clean_input_string(p_cmd);
@@ -767,10 +767,10 @@ int main() {
                                     cJSON_Delete(u_res);
                                 }
                             } else { printf("[!] Dibatalkan.\n"); }
-                            printf("\nTekan Enter untuk melanjutkan..."); int temp_c = getchar(); (void)temp_c;
+                            printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
                         } else {
                             printf("[-] Nomor paket tidak valid. Masukkan angka 1 sampai %d.\n", active_pkg_count);
-                            printf("\nTekan Enter untuk melanjutkan..."); int temp_c = getchar(); (void)temp_c;
+                            printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
                         }
                     } else {
                         int sel_idx = atoi(p_cmd) - 1;
@@ -793,12 +793,12 @@ int main() {
                                 handle_payment_menu(B_CIAM, B_API, B_AUTH, UA, API_KEY, XDATA_KEY, X_API_SEC, ENC_FIELD_KEY, tokens_arr, active_pkgs[sel_idx].quota_code, price, name, conf, p_for, NULL, &goto_main);
                             } else {
                                 printf("[-] Gagal mengambil detail paket.\n");
-                                printf("\nTekan Enter untuk melanjutkan..."); int temp_c = getchar(); (void)temp_c;
+                                printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
                             }
                             if (d_res) cJSON_Delete(d_res);
                         } else {
                             printf("[-] Nomor paket tidak valid. Masukkan angka 1 sampai %d.\n", active_pkg_count);
-                            printf("\nTekan Enter untuk melanjutkan..."); int temp_c = getchar(); (void)temp_c;
+                            printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
                         }
                     }
                 }
@@ -806,16 +806,16 @@ int main() {
             }
         }
         else if (strcmp(choice, "3") == 0) {
-            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); int temp = getchar(); (void)temp; continue; }
+            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); flush_stdin(); continue; }
             
             FILE *f = fopen("hot_data/hot.json", "r");
-            if (!f) { printf("\n[-] File hot_data/hot.json tidak ditemukan!\nTekan Enter..."); int temp = getchar(); (void)temp; continue; }
+            if (!f) { printf("\n[-] File hot_data/hot.json tidak ditemukan!\nTekan Enter..."); flush_stdin(); continue; }
             fseek(f, 0, SEEK_END); long fsize = ftell(f); fseek(f, 0, SEEK_SET);
             char *json_data = malloc(fsize + 1); fread(json_data, 1, fsize, f); fclose(f); json_data[fsize] = 0;
             
             sanitize_json_string(json_data);
             cJSON* hot_arr = cJSON_Parse(json_data); free(json_data);
-            if (!hot_arr || !cJSON_IsArray(hot_arr)) { printf("\n[-] Gagal memparsing hot.json\nTekan Enter..."); int temp = getchar(); (void)temp; continue; }
+            if (!hot_arr || !cJSON_IsArray(hot_arr)) { printf("\n[-] Gagal memparsing hot.json\nTekan Enter..."); flush_stdin(); continue; }
             
             int goto_main = 0;
             while (1) {
@@ -827,7 +827,7 @@ int main() {
                     cJSON* fn = cJSON_GetObjectItem(item, "family_name"); cJSON* vn = cJSON_GetObjectItem(item, "variant_name"); cJSON* on = cJSON_GetObjectItem(item, "option_name");
                     printf("%d. %s - %s - %s\n-------------------------------------------------------\n", i + 1, fn?fn->valuestring:"", vn?vn->valuestring:"", on?on->valuestring:"");
                 }
-                printf("00. Kembali ke menu utama\n-------------------------------------------------------\nPilih paket (nomor): ");
+                printf("00. Kembali ke menu utama\n-------------------------------------------------------\nPilih paket (nomor): "); fflush(stdout);
                 
                 char h_choice[16];
                 if (fgets(h_choice, sizeof(h_choice), stdin) != NULL) {
@@ -886,17 +886,17 @@ int main() {
                                         handle_payment_menu(B_CIAM, B_API, B_AUTH, UA, API_KEY, XDATA_KEY, X_API_SEC, ENC_FIELD_KEY, tokens_arr, target_opt_code, price, name, conf, p_for, selected_bm, &goto_main);
                                     } else {
                                         printf("[-] Gagal mengambil detail paket.\n");
-                                        printf("\nTekan Enter untuk melanjutkan..."); int temp_c = getchar(); (void)temp_c;
+                                        printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
                                     }
                                     if (d_res) cJSON_Delete(d_res);
                                 } else {
                                     printf("[-] Varian/Order tidak ditemukan di Family tersebut.\n");
-                                    printf("\nTekan Enter untuk melanjutkan..."); int temp_c = getchar(); (void)temp_c;
+                                    printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
                                 }
                                 cJSON_Delete(fam_res);
                             } else {
                                 printf("[-] Gagal mengambil data Family Code.\n");
-                                printf("\nTekan Enter untuk melanjutkan..."); int temp_c = getchar(); (void)temp_c;
+                                printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
                             }
                         }
                     }
@@ -906,7 +906,7 @@ int main() {
             cJSON_Delete(hot_arr);
         }
         else if (strcmp(choice, "4") == 0) {
-            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); int temp = getchar(); (void)temp; continue; }
+            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); flush_stdin(); continue; }
             char f_code[256]; printf("\nMasukkan Family Code: "); fflush(stdout);
             if (fgets(f_code, sizeof(f_code), stdin) != NULL) {
                 f_code[strcspn(f_code, "\n")] = 0; clean_input_string(f_code);
@@ -971,7 +971,7 @@ int main() {
                                 }
                             }
                         }
-                        printf("=======================================================\n00. Kembali ke menu utama\n-------------------------------------------------------\nPilih nomor paket untuk dibeli: ");
+                        printf("=======================================================\n00. Kembali ke menu utama\n-------------------------------------------------------\nPilih nomor paket untuk dibeli: "); fflush(stdout);
                         
                         char opt_choice[10];
                         if (fgets(opt_choice, sizeof(opt_choice), stdin) != NULL) {
@@ -996,12 +996,12 @@ int main() {
                                     handle_payment_menu(B_CIAM, B_API, B_AUTH, UA, API_KEY, XDATA_KEY, X_API_SEC, ENC_FIELD_KEY, tokens_arr, codes[sel], price, name, conf, p_for, bm_infos[sel], &goto_main);
                                 } else {
                                     printf("[-] Gagal mengambil detail paket.\n");
-                                    printf("\nTekan Enter untuk melanjutkan..."); int temp_c = getchar(); (void)temp_c;
+                                    printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
                                 }
                                 if (d_res) cJSON_Delete(d_res);
                             } else {
                                 printf("Invalid package number.\n");
-                                printf("\nTekan Enter untuk melanjutkan..."); int temp_c = getchar(); (void)temp_c;
+                                printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
                             }
                         }
                         for(int i=1; i<opt_num; i++) { if(bm_infos[i]) cJSON_Delete(bm_infos[i]); }
@@ -1010,16 +1010,14 @@ int main() {
                     cJSON_Delete(fam_res);
                 } else { 
                     printf("[-] Gagal mengambil data Family Code. Pastikan kode benar.\n"); 
-                    printf("\nTekan Enter untuk melanjutkan..."); int temp_c = getchar(); (void)temp_c;
+                    printf("\nTekan Enter untuk melanjutkan..."); flush_stdin();
                 }
             }
         }
         else if (strcmp(choice, "5") == 0) {
-            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); int temp = getchar(); (void)temp; continue; }
+            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); flush_stdin(); continue; }
 
-            // FIX: flush sisa newline dari input "5" sebelum mulai baca input baru
-            flush_stdin();
-
+            // FIX: Hapus flush_stdin() yang menyebabkan double enter.
             // --- Tampilan form input bersih ---
             clear_screen();
             printf("=======================================================\n");
@@ -1260,113 +1258,182 @@ int main() {
             printf("Tekan Enter untuk kembali ke menu utama..."); flush_stdin();
         }
         else if (strcmp(choice, "00") == 0) {
-            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); int temp = getchar(); (void)temp; continue; }
-            
+            if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); flush_stdin(); continue; }
+
             int goto_main = 0;
             while (1) {
-                FILE *f = fopen("bookmark.json", "r");
-                if (!f) { printf("\n[-] File bookmark.json tidak ditemukan atau kosong!\nTekan Enter..."); int temp = getchar(); (void)temp; break; }
-                fseek(f, 0, SEEK_END); long fsize = ftell(f); fseek(f, 0, SEEK_SET);
-                char *json_data = malloc(fsize + 1); fread(json_data, 1, fsize, f); fclose(f); json_data[fsize] = 0;
-                
-                sanitize_json_string(json_data);
-                cJSON* bm_arr = cJSON_Parse(json_data); free(json_data);
-                if (!bm_arr || !cJSON_IsArray(bm_arr) || cJSON_GetArraySize(bm_arr) == 0) { printf("\n[-] Bookmark kosong.\nTekan Enter..."); if (bm_arr) cJSON_Delete(bm_arr); int temp = getchar(); (void)temp; break; }
-                
+                // Baca bookmark.json setiap loop agar fresh setelah delete
+                FILE *fbm = fopen("bookmark.json", "r");
+                if (!fbm) { printf("\n[-] Belum ada bookmark tersimpan.\nTekan Enter..."); flush_stdin(); break; }
+                fseek(fbm, 0, SEEK_END); long fbm_size = ftell(fbm); fseek(fbm, 0, SEEK_SET);
+                char *bm_json = malloc(fbm_size + 1); fread(bm_json, 1, fbm_size, fbm); fclose(fbm); bm_json[fbm_size] = 0;
+                sanitize_json_string(bm_json);
+                cJSON* bm_arr = cJSON_Parse(bm_json); free(bm_json);
+                if (!bm_arr || !cJSON_IsArray(bm_arr) || cJSON_GetArraySize(bm_arr) == 0) {
+                    printf("\n[-] Bookmark kosong.\nTekan Enter..."); if (bm_arr) cJSON_Delete(bm_arr); flush_stdin(); break;
+                }
+
+                // Tampilan bookmark bersih
                 clear_screen();
-                printf("=======================================================\n               ⭐ Bookmark Paket ⭐\n=======================================================\n");
-                int count = cJSON_GetArraySize(bm_arr);
-                for (int i = 0; i < count; i++) {
-                    cJSON* item = cJSON_GetArrayItem(bm_arr, i);
-                    cJSON* fn = cJSON_GetObjectItem(item, "family_name"); cJSON* vn = cJSON_GetObjectItem(item, "variant_name"); cJSON* on = cJSON_GetObjectItem(item, "option_name");
-                    printf("%d. %s - %s - %s\n", i + 1, fn?fn->valuestring:"", vn?vn->valuestring:"", on?on->valuestring:"");
+                int bm_count = cJSON_GetArraySize(bm_arr);
+                printf("-------------------------------------------------------\n");
+                printf("              ⭐ Bookmark Paket ⭐\n");
+                printf("-------------------------------------------------------\n");
+                for (int i = 0; i < bm_count; i++) {
+                    cJSON* bmi = cJSON_GetArrayItem(bm_arr, i);
+                    cJSON* fn = cJSON_GetObjectItem(bmi, "family_name");
+                    cJSON* vn = cJSON_GetObjectItem(bmi, "variant_name");
+                    cJSON* on = cJSON_GetObjectItem(bmi, "option_name");
+                    printf("%d. %s - %s - %s\n", i + 1,
+                        fn && cJSON_IsString(fn) ? fn->valuestring : "-",
+                        vn && cJSON_IsString(vn) ? vn->valuestring : "-",
+                        on && cJSON_IsString(on) ? on->valuestring : "-");
                 }
                 printf("-------------------------------------------------------\n");
+                printf("0.  Hapus Bookmark\n");
                 printf("00. Kembali ke menu utama\n");
-                printf("Pilih paket (nomor) atau del <nomor>: ");
-                
-                char b_choice[32];
-                if (fgets(b_choice, sizeof(b_choice), stdin) != NULL) {
-                    b_choice[strcspn(b_choice, "\n")] = 0; clean_input_string(b_choice);
-                    if (strcmp(b_choice, "00") == 0 || strcmp(b_choice, "99") == 0) { cJSON_Delete(bm_arr); break; }
-                    
-                    if (strncmp(b_choice, "del ", 4) == 0) {
-                        int del_idx = atoi(b_choice + 4) - 1;
-                        if (del_idx >= 0 && del_idx < count) {
-                            cJSON_DeleteItemFromArray(bm_arr, del_idx);
-                            FILE *fw = fopen("bookmark.json", "w");
-                            if (fw) { char* out = cJSON_Print(bm_arr); fprintf(fw, "%s\n", out); free(out); fclose(fw); }
-                            printf("Bookmark dihapus!\nTekan Enter..."); int temp = getchar(); (void)temp;
-                        }
-                    } else {
-                        int sel = atoi(b_choice);
-                        if (sel > 0 && sel <= count) {
-                            cJSON* selected_bm = cJSON_GetArrayItem(bm_arr, sel - 1);
-                            cJSON* fc_item = cJSON_GetObjectItem(selected_bm, "family_code"); cJSON* ie_item = cJSON_GetObjectItem(selected_bm, "is_enterprise");
-                            cJSON* vn_item = cJSON_GetObjectItem(selected_bm, "variant_name"); cJSON* ord_item = cJSON_GetObjectItem(selected_bm, "order");
-                            
-                            if (!fc_item || !vn_item || !ord_item) { printf("[-] Data bookmark tidak lengkap.\n"); }
-                            else {
-                                const char* f_code = fc_item->valuestring; const char* v_name = vn_item->valuestring;
-                                int target_order = ord_item->valueint; int is_ent = (ie_item && cJSON_IsTrue(ie_item)) ? 1 : -1;
-                                
-                                printf("\n[*] Menarik data keluarga paket dari Bookmark...\n");
-                                cJSON* fam_res = do_family_bruteforce(B_API, API_KEY, XDATA_KEY, X_API_SEC, id_tok, f_code, is_ent, NULL);
-                                
-                                if (fam_res) {
-                                    cJSON* data = cJSON_GetObjectItem(fam_res, "data");
-                                    cJSON* variants = cJSON_GetObjectItem(data, "package_variants");
-                                    char target_opt_code[256] = {0};
-                                    
-                                    cJSON* variant;
-                                    cJSON_ArrayForEach(variant, variants) {
-                                        cJSON* vname = cJSON_GetObjectItem(variant, "name");
-                                        if (vname && strcmp(vname->valuestring, v_name) == 0) {
-                                            cJSON* options = cJSON_GetObjectItem(variant, "package_options");
-                                            cJSON* opt;
-                                            cJSON_ArrayForEach(opt, options) {
-                                                cJSON* ord = cJSON_GetObjectItem(opt, "order");
-                                                if (ord && ord->valueint == target_order) {
-                                                    cJSON* oc = cJSON_GetObjectItem(opt, "package_option_code");
-                                                    if (oc) if(oc && cJSON_IsString(oc)) { strncpy(target_opt_code, oc->valuestring, sizeof(target_opt_code)-1); target_opt_code[sizeof(target_opt_code)-1]='\0'; }
-                                                    break;
-                                                }
-                                            }
-                                            break;
-                                        }
-                                    }
-                                    
-                                    if (strlen(target_opt_code) > 0) {
-                                        printf("\n[*] Mengambil detail untuk transaksi...\n");
-                                        cJSON* d_res = get_package_detail(B_API, API_KEY, XDATA_KEY, X_API_SEC, id_tok, target_opt_code);
-                                        if (d_res && cJSON_GetObjectItem(d_res, "data")) {
-                                            cJSON* d_data = cJSON_GetObjectItem(d_res, "data"); 
-                                            cJSON* p_opt = cJSON_GetObjectItem(d_data, "package_option"); 
-                                            cJSON* p_fam = cJSON_GetObjectItem(d_data, "package_family");
-                                            cJSON* price_item = cJSON_GetObjectItem(p_opt, "price"); 
-                                            int price = price_item ? (cJSON_IsNumber(price_item) ? price_item->valueint : atoi(price_item->valuestring)) : 0;
-                                            cJSON* name_node = cJSON_GetObjectItem(p_opt, "name"); const char* name = (name_node && cJSON_IsString(name_node)) ? name_node->valuestring : ""; 
-                                            cJSON* conf_node = cJSON_GetObjectItem(d_data, "token_confirmation"); const char* conf = (conf_node && cJSON_IsString(conf_node)) ? conf_node->valuestring : "";
-                                            cJSON* p_for_item = cJSON_GetObjectItem(p_fam, "payment_for"); 
-                                            const char* p_for = (p_for_item && p_for_item->valuestring) ? p_for_item->valuestring : "BUY_PACKAGE";
+                printf("-------------------------------------------------------\n");
+                printf("Pilih bookmark (nomor): "); fflush(stdout);
 
-                                            print_package_details(d_data, f_code, target_opt_code, B_API, API_KEY, XDATA_KEY, X_API_SEC, id_tok);
-                                            handle_payment_menu(B_CIAM, B_API, B_AUTH, UA, API_KEY, XDATA_KEY, X_API_SEC, ENC_FIELD_KEY, tokens_arr, target_opt_code, price, name, conf, p_for, selected_bm, &goto_main);
-                                        } else {
-                                            printf("[-] Gagal mengambil detail paket. Mungkin paket sudah tidak tersedia.\nTekan Enter..."); int temp = getchar(); (void)temp;
-                                        }
-                                        if (d_res) cJSON_Delete(d_res);
-                                    } else {
-                                        printf("[-] Varian/Order tidak ditemukan di Family tersebut.\nTekan Enter..."); int temp = getchar(); (void)temp;
-                                    }
-                                    cJSON_Delete(fam_res);
+                char b_choice[16] = {0};
+                if (fgets(b_choice, sizeof(b_choice), stdin) == NULL) { cJSON_Delete(bm_arr); break; }
+                b_choice[strcspn(b_choice, "\n")] = 0; clean_input_string(b_choice);
+
+                if (strcmp(b_choice, "00") == 0 || strcmp(b_choice, "99") == 0) {
+                    cJSON_Delete(bm_arr); break;
+                }
+
+                // Mode hapus bookmark
+                if (strcmp(b_choice, "0") == 0) {
+                    clear_screen();
+                    printf("-------------------------------------------------------\n");
+                    printf("              🗑  Hapus Bookmark\n");
+                    printf("-------------------------------------------------------\n");
+                    for (int i = 0; i < bm_count; i++) {
+                        cJSON* bmi = cJSON_GetArrayItem(bm_arr, i);
+                        cJSON* fn = cJSON_GetObjectItem(bmi, "family_name");
+                        cJSON* on = cJSON_GetObjectItem(bmi, "option_name");
+                        printf("%d. %s - %s\n", i + 1,
+                            fn && cJSON_IsString(fn) ? fn->valuestring : "-",
+                            on && cJSON_IsString(on) ? on->valuestring : "-");
+                    }
+                    printf("-------------------------------------------------------\n");
+                    printf("00. Batal\n");
+                    printf("-------------------------------------------------------\n");
+                    printf("Hapus nomor berapa: "); fflush(stdout);
+
+                    char del_str[16] = {0};
+                    if (fgets(del_str, sizeof(del_str), stdin) != NULL) {
+                        del_str[strcspn(del_str, "\n")] = 0; clean_input_string(del_str);
+                        if (strcmp(del_str, "00") != 0 && strcmp(del_str, "99") != 0) {
+                            int del_idx = atoi(del_str) - 1;
+                            if (del_idx >= 0 && del_idx < bm_count) {
+                                cJSON* del_item = cJSON_GetArrayItem(bm_arr, del_idx);
+                                cJSON* del_on = cJSON_GetObjectItem(del_item, "option_name");
+                                printf("\nHapus bookmark: %s\n", del_on && cJSON_IsString(del_on) ? del_on->valuestring : "?");
+                                printf("Yakin? (y/n): "); fflush(stdout);
+                                char conf_del[8] = {0};
+                                if (fgets(conf_del, sizeof(conf_del), stdin) != NULL && (conf_del[0] == 'y' || conf_del[0] == 'Y')) {
+                                    cJSON_DeleteItemFromArray(bm_arr, del_idx);
+                                    FILE *fw = fopen("bookmark.json", "w");
+                                    if (fw) { char* out = cJSON_Print(bm_arr); fprintf(fw, "%s\n", out); free(out); fclose(fw); }
+                                    printf("[+] Bookmark dihapus!\n");
                                 } else {
-                                    printf("[-] Gagal menarik data Family Code.\nTekan Enter..."); int temp = getchar(); (void)temp;
+                                    printf("[!] Dibatalkan.\n");
                                 }
+                                printf("Tekan Enter untuk melanjutkan..."); flush_stdin();
+                            } else {
+                                printf("[-] Nomor tidak valid.\n");
+                                printf("Tekan Enter untuk melanjutkan..."); flush_stdin();
                             }
                         }
                     }
+                    cJSON_Delete(bm_arr);
+                    continue; // refresh tampilan bookmark
                 }
+
+                // Pilih bookmark untuk dibeli
+                int sel_bm = atoi(b_choice);
+                if (sel_bm < 1 || sel_bm > bm_count) {
+                    printf("[-] Nomor tidak valid.\nTekan Enter..."); flush_stdin();
+                    cJSON_Delete(bm_arr); continue;
+                }
+
+                cJSON* selected_bm = cJSON_GetArrayItem(bm_arr, sel_bm - 1);
+                cJSON* fc_item  = cJSON_GetObjectItem(selected_bm, "family_code");
+                cJSON* ie_item  = cJSON_GetObjectItem(selected_bm, "is_enterprise");
+                cJSON* vn_item  = cJSON_GetObjectItem(selected_bm, "variant_name");
+                cJSON* ord_item = cJSON_GetObjectItem(selected_bm, "order");
+
+                if (!fc_item || !vn_item || !ord_item) {
+                    printf("[-] Data bookmark tidak lengkap.\nTekan Enter..."); flush_stdin();
+                    cJSON_Delete(bm_arr); continue;
+                }
+
+                const char* bm_fcode    = fc_item->valuestring;
+                const char* bm_vname    = vn_item->valuestring;
+                int         bm_order    = ord_item->valueint;
+                int         bm_is_ent   = (ie_item && cJSON_IsTrue(ie_item)) ? 1 : -1;
+
+                printf("\n[*] Menarik data keluarga paket dari Bookmark...\n");
+                cJSON* bm_fam = do_family_bruteforce(B_API, API_KEY, XDATA_KEY, X_API_SEC, id_tok, bm_fcode, bm_is_ent, NULL);
+
+                if (!bm_fam) {
+                    printf("[-] Gagal menarik data Family Code.\nTekan Enter..."); flush_stdin();
+                    cJSON_Delete(bm_arr); continue;
+                }
+
+                // Cari option code dari variant + order
+                char bm_opt_code[256] = {0};
+                cJSON* bm_data  = cJSON_GetObjectItem(bm_fam, "data");
+                cJSON* bm_vars  = cJSON_GetObjectItem(bm_data, "package_variants");
+                cJSON* bm_var;
+                cJSON_ArrayForEach(bm_var, bm_vars) {
+                    cJSON* vn_chk = cJSON_GetObjectItem(bm_var, "name");
+                    if (!vn_chk || strcmp(vn_chk->valuestring, bm_vname) != 0) continue;
+                    cJSON* bm_opts = cJSON_GetObjectItem(bm_var, "package_options");
+                    cJSON* bm_opt;
+                    cJSON_ArrayForEach(bm_opt, bm_opts) {
+                        cJSON* ord_chk = cJSON_GetObjectItem(bm_opt, "order");
+                        if (ord_chk && ord_chk->valueint == bm_order) {
+                            cJSON* oc = cJSON_GetObjectItem(bm_opt, "package_option_code");
+                            if (oc && cJSON_IsString(oc)) strncpy(bm_opt_code, oc->valuestring, 255);
+                            break;
+                        }
+                    }
+                    if (strlen(bm_opt_code) > 0) break;
+                }
+
+                if (strlen(bm_opt_code) == 0) {
+                    printf("[-] Varian/Order tidak ditemukan. Paket mungkin tidak tersedia.\nTekan Enter..."); flush_stdin();
+                    cJSON_Delete(bm_fam); cJSON_Delete(bm_arr); continue;
+                }
+
+                printf("\n[*] Mengambil detail untuk transaksi...\n");
+                cJSON* bm_dres = get_package_detail(B_API, API_KEY, XDATA_KEY, X_API_SEC, id_tok, bm_opt_code);
+                if (!bm_dres || !cJSON_GetObjectItem(bm_dres, "data")) {
+                    printf("[-] Gagal mengambil detail paket. Mungkin sudah tidak tersedia.\nTekan Enter..."); flush_stdin();
+                    if (bm_dres) cJSON_Delete(bm_dres); cJSON_Delete(bm_fam); cJSON_Delete(bm_arr); continue;
+                }
+
+                cJSON* bm_ddata    = cJSON_GetObjectItem(bm_dres, "data");
+                cJSON* bm_popt     = cJSON_GetObjectItem(bm_ddata, "package_option");
+                cJSON* bm_pfam     = cJSON_GetObjectItem(bm_ddata, "package_family");
+                cJSON* bm_price_i  = cJSON_GetObjectItem(bm_popt, "price");
+                int    bm_price    = bm_price_i ? (cJSON_IsNumber(bm_price_i) ? bm_price_i->valueint : atoi(bm_price_i->valuestring)) : 0;
+                cJSON* bm_name_n   = cJSON_GetObjectItem(bm_popt, "name");
+                const char* bm_name= (bm_name_n && cJSON_IsString(bm_name_n)) ? bm_name_n->valuestring : "";
+                cJSON* bm_conf_n   = cJSON_GetObjectItem(bm_ddata, "token_confirmation");
+                const char* bm_conf= (bm_conf_n && cJSON_IsString(bm_conf_n)) ? bm_conf_n->valuestring : "";
+                cJSON* bm_pfor_i   = cJSON_GetObjectItem(bm_pfam, "payment_for");
+                const char* bm_pfor= (bm_pfor_i && bm_pfor_i->valuestring) ? bm_pfor_i->valuestring : "BUY_PACKAGE";
+
+                print_package_details(bm_ddata, bm_fcode, bm_opt_code, B_API, API_KEY, XDATA_KEY, X_API_SEC, id_tok);
+                handle_payment_menu(B_CIAM, B_API, B_AUTH, UA, API_KEY, XDATA_KEY, X_API_SEC, ENC_FIELD_KEY,
+                    tokens_arr, bm_opt_code, bm_price, bm_name, bm_conf, bm_pfor, selected_bm, &goto_main);
+
+                if (bm_dres) cJSON_Delete(bm_dres);
+                cJSON_Delete(bm_fam);
                 cJSON_Delete(bm_arr);
                 if (goto_main) break;
             }
