@@ -104,7 +104,7 @@ jobs:
           echo "=== curl OK ==="
           ls $PREFIX/lib/libcurl.a
 
-      - name: Compile engsel (me_cli)
+      - name: Compile engsel
         run: |
           PREFIX=/tmp/arm-sysroot
           SRC=$(find src -name "*.c" | tr '\n' ' ')
@@ -125,11 +125,12 @@ jobs:
           ls -lh engsel
 
       # =========================================================
-      # Buat OpenWrt APK v3 package untuk arm_cortex-a7
-      # Format: tar.gz berisi .PKGINFO + usr/bin/engsel
-      # Install: apk add --allow-untrusted /tmp/engsel.apk
+      # Package sebagai OpenWrt APK v3 (arm_cortex-a7)
+      # FIX: Semua operasi dilakukan di $GITHUB_WORKSPACE agar
+      #      upload-artifact bisa menemukannya dengan path relatif.
+      # Install di OpenWrt: apk add --allow-untrusted engsel.apk
       # =========================================================
-      - name: Package sebagai OpenWrt .apk (arm_cortex-a7)
+      - name: Package sebagai OpenWrt .apk
         run: |
           PKG_NAME="engsel"
           PKG_VER="1.0.0"
@@ -138,14 +139,15 @@ jobs:
           PKG_URL="https://github.com/${{ github.repository }}"
           BUILD_DATE=$(date +%s)
           INSTALL_SIZE=$(stat -c%s engsel)
+          APK_FILENAME="${PKG_NAME}-${PKG_VER}-${PKG_ARCH}.apk"
 
-          # Buat struktur direktori package
-          mkdir -p /tmp/apkbuild/usr/bin
-          cp engsel /tmp/apkbuild/usr/bin/engsel
-          chmod 755 /tmp/apkbuild/usr/bin/engsel
+          # Buat staging dir di dalam workspace (bukan /tmp!)
+          mkdir -p dist/usr/bin
+          cp engsel dist/usr/bin/engsel
+          chmod 755 dist/usr/bin/engsel
 
-          # Buat .PKGINFO (format APK v2/v3 yang kompatibel dengan OpenWrt 25.x)
-          cat > /tmp/apkbuild/.PKGINFO << EOF
+          # .PKGINFO — wajib ada, dibaca oleh apk tool OpenWrt
+          cat > dist/.PKGINFO << EOF
           pkgname = ${PKG_NAME}
           pkgver = ${PKG_VER}-r0
           arch = ${PKG_ARCH}
@@ -156,30 +158,24 @@ jobs:
           packager = GitHub Actions
           EOF
 
-          # Buat post-install script (opsional, untuk info setelah install)
-          cat > /tmp/apkbuild/.post-install << 'EOF'
+          # Post-install script (opsional)
+          cat > dist/.post-install << 'SCRIPT'
           #!/bin/sh
-          echo "[engsel] Installed to /usr/bin/engsel"
-          echo "[engsel] Jalankan: cd /root && engsel"
-          echo "[engsel] Pastikan file .env ada di direktori kerja!"
-          EOF
-          chmod +x /tmp/apkbuild/.post-install
+          echo "[engsel] Installed! Jalankan: cd /root && engsel"
+          echo "[engsel] Pastikan file .env ada di direktori kerja."
+          SCRIPT
+          chmod +x dist/.post-install
 
-          # Build tar.gz dalam format APK
-          # APK = tar.gz dengan file-file dimulai dari root
-          cd /tmp/apkbuild
-          tar -czf /tmp/${PKG_NAME}-${PKG_VER}-${PKG_ARCH}.apk \
-            .PKGINFO \
-            .post-install \
-            usr/
+          # Build .apk — tar dari dalam folder dist agar path tidak include "dist/"
+          cd dist
+          tar -czf "../${APK_FILENAME}" .PKGINFO .post-install usr/
+          cd ..
 
           echo "=== APK Package ==="
-          ls -lh /tmp/${PKG_NAME}-${PKG_VER}-${PKG_ARCH}.apk
-          # Verifikasi isi
-          tar -tzf /tmp/${PKG_NAME}-${PKG_VER}-${PKG_ARCH}.apk
-
-          # Copy ke workspace untuk artifact
-          cp /tmp/${PKG_NAME}-${PKG_VER}-${PKG_ARCH}.apk .
+          ls -lh "${APK_FILENAME}"
+          echo ""
+          echo "=== Contents ==="
+          tar -tzf "${APK_FILENAME}"
 
       - name: Upload binary (raw)
         uses: actions/upload-artifact@v4
@@ -192,5 +188,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: engsel-openwrt-apk-arm_cortex-a7
-          path: "*.apk"
+          # Path relatif terhadap GITHUB_WORKSPACE — sekarang file ada di sini
+          path: engsel-1.0.0-arm_cortex-a7.apk
           retention-days: 30
+          
