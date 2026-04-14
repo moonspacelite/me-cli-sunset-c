@@ -52,6 +52,6 @@ jobs:
           path: |
             bin/packages/arm_cortex-a7_neon-vfpv4/*/engsel_*.apk
             openwrt/bin/packages/arm_cortex-a7_neon-vfpv4/*/engsel_*.apk
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
           compression-level: 0
