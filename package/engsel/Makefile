@@ -4,12 +4,22 @@
 # INI BUKAN GNU Makefile biasa! Ini adalah OpenWrt Package Makefile.
 # Letakkan di: package/engsel/Makefile (dalam OpenWrt SDK)
 #
+# FIX untuk OpenWrt 25.12.1 SDK:
+# Ditambahkan PKG_SOURCE_PROTO:=none dan PKG_SOURCE_URL:=. agar
+# SDK 25.12.1 bisa membuat sentinel file .prepared_*_check yang dibutuhkan
+# oleh fase check-compile. Tanpa ini build gagal meski compile sukses.
+#
 
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=engsel
 PKG_VERSION:=1.0.0
 PKG_RELEASE:=1
+
+PKG_SOURCE_PROTO:=none
+PKG_SOURCE_URL:=.
+PKG_SOURCE_VERSION:=HEAD
+
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
 
 include $(INCLUDE_DIR)/package.mk
@@ -60,7 +70,7 @@ define Package/engsel/install
 	$(INSTALL_DATA) ./files/etc/engsel/decoy_data/decoy-priohybrid-balance.json $(1)/etc/engsel/decoy_data/decoy-priohybrid-balance.json
 endef
 
-# File-file ini akan dipreservasi saat upgrade (tidak ditimpa opkg/apk)
+# File-file ini akan dipreservasi saat upgrade (tidak ditimpa apk)
 define Package/engsel/conffiles
 /etc/engsel/.env
 /etc/engsel/refresh-tokens.json
