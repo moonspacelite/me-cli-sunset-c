@@ -1,7 +1,8 @@
 # engsel — CLI Client (C port)
 
 # dependensi yang dibutuhkan
-'''libcurl libopenssl ca-bundle'''
+
+```libcurl libopenssl ca-bundle```
 
 ```Port dari `me-cli-sunset` Python ke C, dikompilasi untuk OpenWrt.```
 
