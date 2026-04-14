@@ -1,25 +1,23 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # OpenWrt Package Makefile untuk engsel (me-cli-sunset port C)
-# INI BUKAN GNU Makefile biasa! Ini adalah OpenWrt Package Makefile.
 # Letakkan di: package/engsel/Makefile (dalam OpenWrt SDK)
-#
-# FIX untuk OpenWrt 25.12.1 SDK:
-# Ditambahkan PKG_SOURCE_PROTO:=none dan PKG_SOURCE_URL:=. agar
-# SDK 25.12.1 bisa membuat sentinel file .prepared_*_check yang dibutuhkan
-# oleh fase check-compile. Tanpa ini build gagal meski compile sukses.
 #
 
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=engsel
+# --- PENTING: Versi harus sesuai format APK (hanya angka & titik) ---
 PKG_VERSION:=1.0.0
+# --- PENTING: Pastikan format PKG_RELEASE adalah angka, tidak ada simbol lain ---
 PKG_RELEASE:=1
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/moonspacelite/me-cli-sunset-c.git
-PKG_SOURCE_VERSION:=HEAD
-PKG_MIRROR_HASH:=skip
+# --- PENTING: Gunakan commit hash spesifik, bukan HEAD, untuk konsistensi ---
+PKG_SOURCE_VERSION:=<COMMIT_HASH_ANDA> # Contoh: a1b2c3d4...
+# --- PENTING: Isi dengan hash SHA256 yang valid, jangan 'skip' atau kosong ---
+PKG_MIRROR_HASH:=<SHA256_HASH_DARI_SOURCE_TARBALL>
 
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
 
@@ -40,7 +38,7 @@ define Package/engsel/description
   Data konfigurasi disimpan di /etc/engsel/
 endef
 
-# Salin seluruh isi folder src/ (src/, include/, Makefile) ke build dir
+# --- PENTING: Override Build/Prepare untuk sumber lokal ---
 define Build/Prepare
 	mkdir -p $(PKG_BUILD_DIR)
 	$(CP) ./src/. $(PKG_BUILD_DIR)/
