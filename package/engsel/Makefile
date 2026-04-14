@@ -15,9 +15,9 @@ PKG_RELEASE:=1
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/moonspacelite/me-cli-sunset-c.git
 # --- PENTING: Gunakan commit hash spesifik, bukan HEAD, untuk konsistensi ---
-PKG_SOURCE_VERSION:=b44c4753eac1269668c7771fce4966cdeff70f5a452d75d4f69e1e74e73adfbc # Contoh: a1b2c3d4...
+PKG_SOURCE_VERSION:=HEAD
 # --- PENTING: Isi dengan hash SHA256 yang valid, jangan 'skip' atau kosong ---
-PKG_MIRROR_HASH:=53591c1ac087cc8e7a664973b2103b57d33ea9f4
+PKG_MIRROR_HASH:=skip
 
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
 
