@@ -42,7 +42,7 @@ jobs:
           compression-level: 0
 
       - name: Upload ke GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') && (success() || failure())
         uses: softprops/action-gh-release@v1
         with:
           files: bin/packages/aarch64_generic/*/engsel_*.ipk
