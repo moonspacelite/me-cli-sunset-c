@@ -1,0 +1,126 @@
+name: Build engsel — APK arm_cortex-a7_neon-vfpv4 (ipq40xx)
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-apk-ipq40xx:
+    name: APK arm_cortex-a7_neon-vfpv4 (OpenWrt 25.12.1 / ipq40xx)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ---------------------------------------------------------------
+      # Gunakan Docker image SDK yang sama untuk membuat tarball
+      # sehingga zstd versi dan parameter identik → hash pasti cocok.
+      # SDK image: ghcr.io/openwrt/sdk:arm_cortex-a7_neon-vfpv4-25.12.1
+      # ---------------------------------------------------------------
+      - name: Buat tarball menggunakan SDK Docker image (hash dijamin cocok)
+        run: |
+          COMMIT_SHA="${{ github.sha }}"
+          REPO_URL="https://github.com/${{ github.repository }}.git"
+
+          # Jalankan script build tarball DI DALAM container SDK
+          # sehingga zstd binary yang dipakai identik dengan yang SDK pakai
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            ghcr.io/openwrt/sdk:arm_cortex-a7_neon-vfpv4-25.12.1 \
+            bash -c "
+              set -e
+              cd /builder
+              mkdir -p tmp/dl dl
+
+              # Clone repo
+              cd tmp/dl
+              git clone '$REPO_URL' engsel-1.0.0
+              cd engsel-1.0.0
+              git checkout '$COMMIT_SHA'
+
+              TAR_TIMESTAMP=\$(git log -1 --no-show-signature --format='@%ct')
+              git config core.abbrev 8
+              git archive --format=tar HEAD --output=../engsel-1.0.0.tar.git
+              tar --numeric-owner --owner=0 --group=0 --ignore-failed-read \
+                -C engsel-1.0.0 -f ../engsel-1.0.0.tar.git -r .git .gitmodules 2>/dev/null || true
+
+              cd /builder/tmp/dl
+              rm -rf engsel-1.0.0
+              mkdir engsel-1.0.0
+              tar -C engsel-1.0.0 -xf engsel-1.0.0.tar.git
+              cd engsel-1.0.0
+              rm -rf .git .gitmodules
+
+              cd /builder/tmp/dl
+              tar --numeric-owner --owner=0 --group=0 --mode=a-s --sort=name \
+                --mtime=\"\$TAR_TIMESTAMP\" \
+                -c engsel-1.0.0 | zstd -T0 --ultra -20 -c > /builder/dl/engsel-1.0.0.tar.zst
+
+              # Hitung hash pakai mkhash SDK (sama persis dengan verifikasi SDK)
+              HASH=\$(/builder/staging_dir/host/bin/mkhash sha256 /builder/dl/engsel-1.0.0.tar.zst)
+              echo \"COMPUTED_HASH=\$HASH\" > /workspace/sdk_hash.env
+              echo \"Hash: \$HASH\"
+              echo \"Size: \$(du -h /builder/dl/engsel-1.0.0.tar.zst | cut -f1)\"
+            "
+
+          # Baca hash hasil SDK
+          source "$GITHUB_WORKSPACE/sdk_hash.env"
+          echo "Hash dari SDK: $COMPUTED_HASH"
+
+          # Inject ke Makefile
+          sed -i "s|^PKG_SOURCE_VERSION:=.*|PKG_SOURCE_VERSION:=$COMMIT_SHA|" \
+            package/engsel/Makefile
+          sed -i "s|^PKG_MIRROR_HASH:=.*|PKG_MIRROR_HASH:=$COMPUTED_HASH|" \
+            package/engsel/Makefile
+
+          echo "=== Verifikasi Makefile ==="
+          grep -E "PKG_SOURCE|PKG_MIRROR" package/engsel/Makefile
+
+      - name: Build via OpenWrt SDK
+        uses: openwrt/gh-action-sdk@v5
+        env:
+          ARCH: arm_cortex-a7_neon-vfpv4-25.12.1
+          FEED_DIR: ${{ github.workspace }}/package
+          PACKAGES: engsel
+          BUILD_LOG: 1
+          NO_SHFMT_CHECK: 1
+          IGNORE_ERRORS: 1
+
+      - name: Tampilkan hasil build
+        if: always()
+        run: |
+          echo "=== Semua file .apk ==="
+          find bin/ -name "*.apk" 2>/dev/null || echo "Tidak ada .apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: engsel-arm_cortex-a7_neon-vfpv4-openwrt25
+          path: bin/packages/arm_cortex-a7_neon-vfpv4/*/engsel_*.apk
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Upload ke GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: bin/packages/arm_cortex-a7_neon-vfpv4/*/engsel_*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload log (jika gagal)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: log-ipq40xx
+          path: logs/
+          retention-days: 7
