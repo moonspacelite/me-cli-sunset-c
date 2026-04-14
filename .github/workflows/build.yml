@@ -12,6 +12,8 @@ jobs:
   build-ipk-aarch64:
     name: IPK aarch64_generic (OpenWrt 24.10)
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repo
