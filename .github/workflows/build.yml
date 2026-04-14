@@ -1,205 +1,136 @@
-name: Build for OpenWrt ARM Cortex-A7 (.apk)
+name: Build engsel — IPK (aarch64) + APK (arm_cortex-a7)
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
-  build:
+
+  # ──────────────────────────────────────────────────────────────────
+  # JOB 1: .ipk untuk OpenWrt 24.10 — aarch64_generic
+  # Install: opkg install --force-checksum /tmp/engsel_*.ipk
+  # ──────────────────────────────────────────────────────────────────
+  build-ipk-aarch64:
+    name: IPK › aarch64_generic (OpenWrt 24.10)
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install zig dan tools
+      - name: Build via OpenWrt SDK (gh-action-sdk)
+        uses: openwrt/gh-action-sdk@v5
+        env:
+          # Format: <arch>-<openwrt-version>
+          # SDK 24.10 → hasilkan .ipk (opkg)
+          ARCH: aarch64_generic-24.10.0
+          FEED_DIR: ${{ github.workspace }}/package
+          PACKAGES: engsel
+          NO_DEFAULT_FEEDS: 1
+          BUILD_LOG: 1
+
+      - name: Cari file IPK hasil build
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y wget make perl tar gzip
+          echo "=== Hasil build ==="
+          find bin/ -name "*.ipk" | head -20
 
-          cd /tmp
-          wget -q https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz
-          tar -xf zig-linux-x86_64-0.13.0.tar.xz
-          echo "/tmp/zig-linux-x86_64-0.13.0" >> $GITHUB_PATH
-
-      - name: Buat zig wrapper scripts
-        run: |
-          cat > /tmp/zigcc << 'EOF'
-          #!/bin/sh
-          exec zig cc -target arm-linux-musleabihf -mcpu=cortex_a7 "$@"
-          EOF
-
-          cat > /tmp/zigar << 'EOF'
-          #!/bin/sh
-          exec zig ar "$@"
-          EOF
-
-          cat > /tmp/zigranlib << 'EOF'
-          #!/bin/sh
-          exec zig ranlib "$@"
-          EOF
-
-          chmod +x /tmp/zigcc /tmp/zigar /tmp/zigranlib
-
-          echo 'int main(){return 0;}' > /tmp/test.c
-          /tmp/zigcc /tmp/test.c -o /tmp/test_arm
-          file /tmp/test_arm
-          echo "Zig wrapper OK"
-
-      - name: Build OpenSSL static for ARM musl
-        run: |
-          PREFIX=/tmp/arm-sysroot
-          mkdir -p $PREFIX
-
-          cd /tmp
-          wget -q https://github.com/openssl/openssl/releases/download/openssl-3.3.2/openssl-3.3.2.tar.gz
-          tar -xzf openssl-3.3.2.tar.gz
-          cd openssl-3.3.2
-
-          CC=/tmp/zigcc \
-          AR=/tmp/zigar \
-          RANLIB=/tmp/zigranlib \
-          ./Configure linux-armv4 \
-            --prefix=$PREFIX \
-            no-shared no-tests no-apps no-asm
-
-          make -j$(nproc) build_libs
-          make install_dev
-          echo "=== OpenSSL OK ==="
-          ls $PREFIX/lib/libssl.a $PREFIX/lib/libcrypto.a
-
-      - name: Build curl static for ARM musl
-        run: |
-          PREFIX=/tmp/arm-sysroot
-
-          cd /tmp
-          wget -q https://curl.se/download/curl-8.10.1.tar.gz
-          tar -xzf curl-8.10.1.tar.gz
-          cd curl-8.10.1
-
-          ./configure \
-            --host=arm-linux-gnueabihf \
-            --prefix=$PREFIX \
-            CC="/tmp/zigcc" \
-            AR="/tmp/zigar" \
-            RANLIB="/tmp/zigranlib" \
-            CPPFLAGS="-I$PREFIX/include" \
-            LDFLAGS="-L$PREFIX/lib" \
-            LIBS="-lssl -lcrypto -ldl -lpthread" \
-            --with-openssl=$PREFIX \
-            --disable-shared --enable-static \
-            --disable-ldap --disable-ldaps \
-            --disable-rtsp --disable-dict \
-            --disable-telnet --disable-tftp \
-            --disable-pop3 --disable-imap \
-            --disable-smb --disable-smtp \
-            --disable-gopher --disable-mqtt \
-            --without-libidn2 --without-librtmp \
-            --without-libpsl \
-            --disable-docs --disable-manual
-
-          make -j$(nproc)
-          make install
-          echo "=== curl OK ==="
-          ls $PREFIX/lib/libcurl.a
-
-      - name: Compile engsel
-        run: |
-          PREFIX=/tmp/arm-sysroot
-          SRC=$(find src -name "*.c" | tr '\n' ' ')
-
-          /tmp/zigcc \
-            -Os \
-            -I./include \
-            -I${PREFIX}/include \
-            -Wno-unused-result \
-            -Wno-misleading-indentation \
-            ${SRC} \
-            -o engsel \
-            -L${PREFIX}/lib \
-            -lcurl -lssl -lcrypto -lm -lpthread -ldl
-
-          echo "=== Binary ==="
-          file engsel
-          ls -lh engsel
-
-      # =========================================================
-      # Package sebagai OpenWrt APK v3 (arm_cortex-a7)
-      #
-      # Format APK v3 = DUAN gzip stream dikoncatenasi:
-      #   Stream 1: tar.gz berisi .PKGINFO (control metadata)
-      #   Stream 2: tar.gz berisi file-file paket (usr/bin/engsel)
-      #
-      # Bukan sekedar tar.gz biasa! OpenWrt 25.x menolak format lama.
-      # Install: apk add --allow-untrusted /tmp/engsel.apk
-      # =========================================================
-      - name: Package sebagai OpenWrt APK v3
-        run: |
-          PKG_NAME="engsel"
-          PKG_VER="1.0.0"
-          PKG_REL="r0"
-          PKG_ARCH="arm_cortex-a7"
-          BUILD_DATE=$(date +%s)
-          INSTALL_SIZE=$(stat -c%s engsel)
-          APK_FILENAME="${PKG_NAME}-${PKG_VER}-${PKG_ARCH}.apk"
-
-          # --- Buat Control Stream ---
-          mkdir -p /tmp/ctrl
-          cat > /tmp/ctrl/.PKGINFO << EOF
-          pkgname = ${PKG_NAME}
-          pkgver = ${PKG_VER}-${PKG_REL}
-          arch = ${PKG_ARCH}
-          size = ${INSTALL_SIZE}
-          pkgdesc = CLI client for XL Axiata (me-cli-sunset port to C)
-          url = https://github.com/${{ github.repository }}
-          builddate = ${BUILD_DATE}
-          packager = GitHub Actions
-          EOF
-
-          # Tar+gzip control — cd ke dalam folder agar path bersih
-          cd /tmp/ctrl
-          tar -czf /tmp/control.tar.gz .PKGINFO
-          cd $GITHUB_WORKSPACE
-
-          # --- Buat Data Stream ---
-          mkdir -p /tmp/data/usr/bin
-          cp engsel /tmp/data/usr/bin/engsel
-          chmod 755 /tmp/data/usr/bin/engsel
-
-          # Tar+gzip data — path harus usr/bin/engsel (tanpa ./)
-          cd /tmp/data
-          tar -czf /tmp/data.tar.gz usr/
-          cd $GITHUB_WORKSPACE
-
-          # --- Gabungkan dua stream → APK v3 ---
-          cat /tmp/control.tar.gz /tmp/data.tar.gz > "${APK_FILENAME}"
-
-          echo "=== APK v3 Package ==="
-          ls -lh "${APK_FILENAME}"
-
-          # Verifikasi dua gzip member di top-level
-          CTRL_SIZE=$(stat -c%s /tmp/control.tar.gz)
-          python3 -c "
-          data = open('${APK_FILENAME}','rb').read()
-          ctrl = $CTRL_SIZE
-          s1ok = data[0]==0x1f and data[1]==0x8b
-          s2ok = data[ctrl]==0x1f and data[ctrl+1]==0x8b
-          print(f'Stream 1 (control) @ offset 0: {\"OK\" if s1ok else \"FAIL\"}')
-          print(f'Stream 2 (data)    @ offset {ctrl}: {\"OK\" if s2ok else \"FAIL\"}')
-          print('APK v3 format: OK' if s1ok and s2ok else 'APK v3 format: ERROR')
-          "
-
-      - name: Upload binary (raw)
+      - name: Upload IPK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: engsel-binary-arm-cortex-a7
-          path: engsel
+          name: engsel-aarch64_generic-openwrt24-ipk
+          path: bin/packages/aarch64_generic/*/engsel_*.ipk
           retention-days: 30
 
-      - name: Upload OpenWrt APK v3 package
+      - name: Upload build log (jika gagal)
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: engsel-openwrt-apk-arm_cortex-a7
-          path: engsel-1.0.0-arm_cortex-a7.apk
+          name: build-log-aarch64
+          path: logs/
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────
+  # JOB 2: .apk untuk OpenWrt 25.05 — arm_cortex-a7_neon-vfpv4
+  # Install: apk add --allow-untrusted /tmp/engsel-*.apk
+  # ──────────────────────────────────────────────────────────────────
+  build-apk-arm-cortex-a7:
+    name: APK › arm_cortex-a7_neon-vfpv4 (OpenWrt 25.05)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Build via OpenWrt SDK (gh-action-sdk)
+        uses: openwrt/gh-action-sdk@v5
+        env:
+          # SDK 25.05 → hasilkan .apk (apk)
+          ARCH: arm_cortex-a7_neon-vfpv4-25.05.0
+          FEED_DIR: ${{ github.workspace }}/package
+          PACKAGES: engsel
+          NO_DEFAULT_FEEDS: 1
+          BUILD_LOG: 1
+
+      - name: Cari file APK hasil build
+        run: |
+          echo "=== Hasil build ==="
+          find bin/ -name "*.apk" | head -20
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: engsel-arm_cortex-a7-openwrt25-apk
+          path: bin/packages/arm_cortex-a7_neon-vfpv4/*/engsel-*.apk
           retention-days: 30
+
+      - name: Upload build log (jika gagal)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-arm-cortex-a7
+          path: logs/
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────
+  # JOB 3: Buat GitHub Release (hanya saat push tag v*)
+  # ──────────────────────────────────────────────────────────────────
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-ipk-aarch64, build-apk-arm-cortex-a7]
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download semua artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: release-files/
+
+      - name: Tampilkan isi release-files
+        run: find release-files/ -type f
+
+      - name: Buat GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-files/**/*.ipk
+            release-files/**/*.apk
+          body: |
+            ## engsel ${{ github.ref_name }}
+
+            ### Cara Install
+
+            **OpenWrt 24.x — aarch64_generic** (opkg):
+            ```sh
+            opkg install --force-checksum /tmp/engsel_*.ipk
+            ```
+
+            **OpenWrt 25.x — arm_cortex-a7_neon-vfpv4** (apk):
+            ```sh
+            apk add --allow-untrusted /tmp/engsel-*.apk
+            ```
+
+            Setelah install, ketik `engsel` di terminal.
