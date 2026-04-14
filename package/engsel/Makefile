@@ -16,9 +16,10 @@ PKG_NAME:=engsel
 PKG_VERSION:=1.0.0
 PKG_RELEASE:=1
 
-PKG_SOURCE_PROTO:=none
-PKG_SOURCE_URL:=.
+PKG_SOURCE_PROTO:=git
+PKG_SOURCE_URL:=https://github.com/moonspacelite/me-cli-sunset-c.git
 PKG_SOURCE_VERSION:=HEAD
+PKG_MIRROR_HASH:=skip
 
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
 
