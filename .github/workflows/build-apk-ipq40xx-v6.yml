@@ -7,7 +7,6 @@ on:
 
 jobs:
   build-apk-ipq40xx:
-    name: APK arm_cortex-a7_neon-vfpv4 (OpenWrt 25.12.1 / ipq40xx)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -18,24 +17,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Tampilkan isi direktori
-        run: |
-          echo "=== Isi direktori package ==="
-          find package/ -type f || echo "Tidak ada direktori package"
-
-      # --- PENTING: Gunakan aksi SDK resmi. SDK akan otomatis menangani download dan hash. ---
-      - name: Build package menggunakan OpenWrt SDK
+      - name: Build package via OpenWrt SDK
         id: build
-        uses: openwrt/gh-action-sdk@v7 # Gunakan versi terbaru
+        uses: openwrt/gh-action-sdk@v7
         env:
           ARCH: arm_cortex-a7_neon-vfpv4-25.12.1
           FEED_DIR: ${{ github.workspace }}/package
           PACKAGES: engsel
           BUILD_LOG: 1
           NO_SHFMT_CHECK: 1
-          IGNORE_ERRORS: 1 # Biarkan build tetap lanjut meski error, agar kita bisa lihat log
+          # IGNORE_ERRORS dihapus agar build gagal terlihat
 
-      - name: Upload log build (jika gagal)
+      - name: Upload build logs (if failed)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -45,13 +38,11 @@ jobs:
             openwrt/logs/
           retention-days: 7
 
-      - name: Cari dan Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: engsel-arm_cortex-a7_neon-vfpv4-openwrt25
+          name: engsel-${{ env.ARCH }}
           path: |
-            bin/packages/arm_cortex-a7_neon-vfpv4/*/engsel_*.apk
-            openwrt/bin/packages/arm_cortex-a7_neon-vfpv4/*/engsel_*.apk
+            openwrt/bin/packages/**/engsel_*.apk
+            openwrt/bin/targets/**/engsel_*.apk
           if-no-files-found: warn
-          retention-days: 30
-          compression-level: 0
