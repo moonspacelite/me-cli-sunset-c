@@ -1,0 +1,28 @@
+#!/bin/sh
+# postinst - dijalankan setelah package engsel diinstall
+
+# Pastikan direktori config ada dan bisa ditulis
+mkdir -p /etc/engsel/hot_data
+mkdir -p /etc/engsel/decoy_data
+
+# Pastikan refresh-tokens.json adalah array kosong jika belum ada token
+if [ ! -s /etc/engsel/refresh-tokens.json ]; then
+    echo "[]" > /etc/engsel/refresh-tokens.json
+fi
+
+# Pastikan bookmark.json ada
+if [ ! -f /etc/engsel/bookmark.json ]; then
+    echo "[]" > /etc/engsel/bookmark.json
+fi
+
+# Set permission yang tepat
+chmod 755 /etc/engsel
+chmod 644 /etc/engsel/.env
+chmod 644 /etc/engsel/refresh-tokens.json
+chmod 644 /etc/engsel/bookmark.json
+chmod -R 644 /etc/engsel/hot_data/
+chmod -R 644 /etc/engsel/decoy_data/
+
+echo "engsel: Instalasi selesai. Ketik 'engsel' untuk memulai."
+
+exit 0

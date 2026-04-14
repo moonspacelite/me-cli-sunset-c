@@ -1,0 +1,18 @@
+[
+    {
+        "family_name": "myPRIO X Unlimited",
+        "family_code": "162d261b-05c7-450c-9b7a-1873b160140c",
+        "is_enterprise": false,
+        "variant_name": "myPRIO X Unlimited",
+        "option_name": "Internet 5G",
+        "order": 25
+    },
+    {
+        "family_name": "myPRIO X Unlimited",
+        "family_code": "162d261b-05c7-450c-9b7a-1873b160140c",
+        "is_enterprise": false,
+        "variant_name": "myPRIO X Unlimited",
+        "option_name": "24 jam 5G",
+        "order": 26
+    }
+]
