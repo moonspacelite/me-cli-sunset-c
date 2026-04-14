@@ -4,7 +4,7 @@
 
 # dependensi yang dibutuhkan
 
-```libcurl libopenssl ca-bundle```
+```sh libcurl libopenssl ca-bundle ```
 
 ## Cara install di router
 
