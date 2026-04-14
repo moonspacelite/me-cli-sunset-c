@@ -1,24 +1,21 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-#
-# OpenWrt Package Makefile untuk engsel (me-cli-sunset port C)
-# Letakkan di: package/engsel/Makefile (dalam OpenWrt SDK)
-#
-
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=engsel
-# --- PENTING: Versi harus sesuai format APK (hanya angka & titik) ---
 PKG_VERSION:=1.0.0
-# --- PENTING: Pastikan format PKG_RELEASE adalah angka, tidak ada simbol lain ---
 PKG_RELEASE:=1
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/moonspacelite/me-cli-sunset-c.git
-# --- PENTING: Gunakan commit hash spesifik, bukan HEAD, untuk konsistensi ---
+# Gunakan commit hash terbaru yang sudah Anda push
 PKG_SOURCE_VERSION:=7b6b423f212de41bbf6e5076ea3c39ca52c3ad7d
+# Hash yang didapat dari log sebelumnya
 PKG_MIRROR_HASH:=453432e349dc7ec394f36e2a1b13059f1ae11cd91957192fa48ca5acf5392a85
 
-PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
+# Biarkan sistem OpenWrt mengekstrak tarball ke subdirektori ini
+PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)
+PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.zst
+PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_SOURCE_SUBDIR)
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -26,7 +23,7 @@ define Package/engsel
   SECTION:=utils
   CATEGORY:=Utilities
   TITLE:=engsel - XL Axiata CLI client (C port)
-  URL:=https://github.com/youruser/me-cli-sunset-c
+  URL:=https://github.com/moonspacelite/me-cli-sunset-c
   MAINTAINER:=Rofiq
   DEPENDS:=+libcurl +libopenssl +libpthread
 endef
@@ -37,14 +34,11 @@ define Package/engsel/description
   Data konfigurasi disimpan di /etc/engsel/
 endef
 
-# --- PENTING: Override Build/Prepare untuk sumber lokal ---
-define Build/Prepare
-	mkdir -p $(PKG_BUILD_DIR)
-	$(CP) ./src/. $(PKG_BUILD_DIR)/
-endef
+# Tidak perlu Build/Prepare, source otomatis di-extract
 
 define Build/Compile
-	$(MAKE) -C $(PKG_BUILD_DIR) \
+	# Asumsi Makefile untuk kompilasi C ada di subdirektori src/
+	$(MAKE) -C $(PKG_BUILD_DIR)/src \
 		CC="$(TARGET_CC)" \
 		CFLAGS="$(TARGET_CFLAGS) -I$(PKG_BUILD_DIR)/include" \
 		LDFLAGS="$(TARGET_LDFLAGS) -lssl -lcrypto -lcurl -lm -lpthread"
@@ -52,7 +46,7 @@ endef
 
 define Package/engsel/install
 	$(INSTALL_DIR) $(1)/usr/bin
-	$(INSTALL_BIN) $(PKG_BUILD_DIR)/engsel $(1)/usr/bin/engsel
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/src/engsel $(1)/usr/bin/engsel
 
 	$(INSTALL_DIR) $(1)/etc/engsel
 	$(INSTALL_DATA) ./files/etc/engsel/.env $(1)/etc/engsel/.env
@@ -68,7 +62,6 @@ define Package/engsel/install
 	$(INSTALL_DATA) ./files/etc/engsel/decoy_data/decoy-priohybrid-balance.json $(1)/etc/engsel/decoy_data/decoy-priohybrid-balance.json
 endef
 
-# File-file ini akan dipreservasi saat upgrade (tidak ditimpa apk)
 define Package/engsel/conffiles
 /etc/engsel/.env
 /etc/engsel/refresh-tokens.json
