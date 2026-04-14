@@ -10,22 +10,40 @@
 
 #define TZ_OFFSET_SEC (7 * 3600)
 
-static long long get_current_time_ms() { 
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (long long)(tv.tv_sec) * 1000 + (tv.tv_usec / 1000); 
+/* -------------------------------------------------------------------------
+ * Helper: random bytes (sama seperti di ciam.c)
+ * ------------------------------------------------------------------------- */
+static int get_random_bytes(unsigned char *buf, size_t len) {
+    FILE *f = fopen("/dev/urandom", "rb");
+    if (!f) return -1;
+    size_t read = fread(buf, 1, len, f);
+    fclose(f);
+    return (read == len) ? 0 : -1;
 }
 
-static void generate_uuid(char *out) { 
-    srand(time(NULL));
-    sprintf(out, "%08x-%04x-%04x-%04x-%08x%04x",
-            rand(), rand() & 0xffff,
-            ((rand() & 0x0fff) | 0x4000),
-            (rand() & 0x3fff) | 0x8000,
-            rand(), rand() & 0xffff);
+/* -------------------------------------------------------------------------
+ * UUID v4 acak
+ * ------------------------------------------------------------------------- */
+static void generate_uuid(char *out) {
+    unsigned char rand[16];
+    if (get_random_bytes(rand, sizeof(rand)) != 0) {
+        srand(time(NULL));
+        for (int i = 0; i < 16; i++) rand[i] = rand() & 0xFF;
+    }
+    rand[6] = (rand[6] & 0x0F) | 0x40;
+    rand[8] = (rand[8] & 0x3F) | 0x80;
+
+    sprintf(out, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+            rand[0], rand[1], rand[2], rand[3],
+            rand[4], rand[5],
+            rand[6], rand[7],
+            rand[8], rand[9],
+            rand[10], rand[11], rand[12], rand[13], rand[14], rand[15]);
 }
 
-// Timestamp ala Java dengan zona +0700, portabel tanpa tm_gmtoff
+/* -------------------------------------------------------------------------
+ * Timestamp Java‑like dengan zona +0700 (tanpa tm_gmtoff)
+ * ------------------------------------------------------------------------- */
 static void get_java_like_timestamp(char *out) {
     struct timeval tv;
     gettimeofday(&tv, NULL);
@@ -37,6 +55,15 @@ static void get_java_like_timestamp(char *out) {
             tm->tm_hour, tm->tm_min, tm->tm_sec, ms);
 }
 
+static long long get_current_time_ms() { 
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (long long)(tv.tv_sec) * 1000 + (tv.tv_usec / 1000); 
+}
+
+/* -------------------------------------------------------------------------
+ * send_api_request (tidak diubah selain UUID dan timestamp)
+ * ------------------------------------------------------------------------- */
 cJSON* send_api_request(const char* base_url, const char* api_key, const char* xdata_key,
                         const char* api_secret, const char* path, cJSON* payload_dict,
                         const char* id_token, const char* method, const char* custom_signature) {
@@ -111,6 +138,9 @@ cJSON* send_api_request(const char* base_url, const char* api_key, const char* x
     return result;
 }
 
+/* -------------------------------------------------------------------------
+ * Fungsi‑fungsi API (tidak diubah dari versi sebelumnya)
+ * ------------------------------------------------------------------------- */
 cJSON* get_profile(const char* base, const char* api_key, const char* xdata, const char* sec,
                    const char* id_token, const char* access_token) { 
     cJSON* p = cJSON_CreateObject();

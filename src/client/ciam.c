@@ -5,13 +5,73 @@
 #include <sys/time.h>
 #include <openssl/hmac.h>
 #include <openssl/evp.h>
+#include <openssl/md5.h>
 #include "../include/client/ciam.h"
 #include "../include/client/http_client.h"
 
-// Offset zona waktu: GMT+7 (WIB) dalam detik
 #define TZ_OFFSET_SEC (7 * 3600)
 
-// Timestamp header dengan mundur 5 menit (trik rahasia) dan offset +0700
+/* -------------------------------------------------------------------------
+ * Helper: random bytes dari /dev/urandom (fallback ke rand() jika gagal)
+ * ------------------------------------------------------------------------- */
+static int get_random_bytes(unsigned char *buf, size_t len) {
+    FILE *f = fopen("/dev/urandom", "rb");
+    if (!f) return -1;
+    size_t read = fread(buf, 1, len, f);
+    fclose(f);
+    return (read == len) ? 0 : -1;
+}
+
+/* -------------------------------------------------------------------------
+ * UUID v4 yang benar‑benar acak (RFC 4122)
+ * ------------------------------------------------------------------------- */
+static void generate_uuid_v4(char *out) {
+    unsigned char rand[16];
+    if (get_random_bytes(rand, sizeof(rand)) != 0) {
+        // fallback pseudo‑random
+        srand(time(NULL));
+        for (int i = 0; i < 16; i++) rand[i] = rand() & 0xFF;
+    }
+    // Set versi 4 dan varian 1
+    rand[6] = (rand[6] & 0x0F) | 0x40;
+    rand[8] = (rand[8] & 0x3F) | 0x80;
+
+    sprintf(out, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+            rand[0], rand[1], rand[2], rand[3],
+            rand[4], rand[5],
+            rand[6], rand[7],
+            rand[8], rand[9],
+            rand[10], rand[11], rand[12], rand[13], rand[14], rand[15]);
+}
+
+/* -------------------------------------------------------------------------
+ * MD5 hex string
+ * ------------------------------------------------------------------------- */
+static char* md5_hex(const char *input) {
+    unsigned char digest[MD5_DIGEST_LENGTH];
+    MD5((unsigned char*)input, strlen(input), digest);
+    char *hex = malloc(MD5_DIGEST_LENGTH * 2 + 1);
+    for (int i = 0; i < MD5_DIGEST_LENGTH; i++)
+        sprintf(&hex[i*2], "%02x", digest[i]);
+    return hex;
+}
+
+/* -------------------------------------------------------------------------
+ * Ax-Device-Id = MD5 dari plain fingerprint
+ * ------------------------------------------------------------------------- */
+static char* generate_ax_device_id(const char* msisdn) {
+    const char* key_str = getenv("AX_FP_KEY");
+    if (!key_str) return strdup("dummy_device_id");
+
+    char plain[256];
+    snprintf(plain, sizeof(plain),
+        "samsung|SM-N935F|en|720x1540|GMT07:00|192.168.1.1|1.0|Android 13|%s", msisdn);
+    return md5_hex(plain);
+}
+
+/* -------------------------------------------------------------------------
+ * Timestamp header (mundur 5 menit) +0700
+ * ------------------------------------------------------------------------- */
 static char* get_timestamp_header(void) {
     time_t now = time(NULL) - 300 + TZ_OFFSET_SEC;
     struct tm *t = gmtime(&now);
@@ -20,7 +80,9 @@ static char* get_timestamp_header(void) {
     return strdup(buf);
 }
 
-// Timestamp untuk signature (saat ini) dengan offset +0700
+/* -------------------------------------------------------------------------
+ * Timestamp untuk signature (saat ini) +0700
+ * ------------------------------------------------------------------------- */
 static char* get_ts_for_signature(void) {
     time_t now = time(NULL) + TZ_OFFSET_SEC;
     struct tm *t = gmtime(&now);
@@ -29,7 +91,9 @@ static char* get_ts_for_signature(void) {
     return strdup(buf);
 }
 
-// Generate Ax-Fingerprint (tetap sama)
+/* -------------------------------------------------------------------------
+ * Ax-Fingerprint (AES‑256‑CBC)
+ * ------------------------------------------------------------------------- */
 static char* generate_ax_fingerprint(const char* msisdn) {
     const char* key_str = getenv("AX_FP_KEY");
     if (!key_str) return strdup("dummy");
@@ -65,6 +129,9 @@ static char* generate_ax_fingerprint(const char* msisdn) {
     return b64;
 }
 
+/* -------------------------------------------------------------------------
+ * Ax-Api-Signature (HMAC‑SHA256 lalu Base64)
+ * ------------------------------------------------------------------------- */
 static char* generate_ax_api_signature(const char* ts_for_sign, const char* contact,
                                        const char* code, const char* contact_type, const char* key_str) {
     if (!key_str) return strdup("dummy");
@@ -92,6 +159,9 @@ static char* generate_ax_api_signature(const char* ts_for_sign, const char* cont
     return b64;
 }
 
+/* -------------------------------------------------------------------------
+ * API: Refresh Token
+ * ------------------------------------------------------------------------- */
 cJSON* get_new_token(const char* base_ciam_url, const char* basic_auth, const char* ua,
                      const char* refresh_token) {
     char url[512];
@@ -118,6 +188,9 @@ cJSON* get_new_token(const char* base_ciam_url, const char* basic_auth, const ch
     return result;
 }
 
+/* -------------------------------------------------------------------------
+ * API: Request OTP
+ * ------------------------------------------------------------------------- */
 cJSON* request_otp(const char* base_ciam_url, const char* basic_auth, const char* ua,
                    const char* number) {
     char url[512];
@@ -130,29 +203,38 @@ cJSON* request_otp(const char* base_ciam_url, const char* basic_auth, const char
     char* fp = generate_ax_fingerprint(number);
     char fp_hdr[1024];
     snprintf(fp_hdr, sizeof(fp_hdr), "Ax-Fingerprint: %s", fp);
-    free(fp);
+    char* dev_id = generate_ax_device_id(number);
+    char dev_id_hdr[256];
+    snprintf(dev_id_hdr, sizeof(dev_id_hdr), "Ax-Device-Id: %s", dev_id);
     char* ts_hdr = get_timestamp_header();
     char req_at[128];
     snprintf(req_at, sizeof(req_at), "Ax-Request-At: %s", ts_hdr);
     free(ts_hdr);
-    char dev_id[128];
-    snprintf(dev_id, sizeof(dev_id), "Ax-Device-Id: a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6");
+    char req_id[64];
+    generate_uuid_v4(req_id);
+    char req_id_hdr[128];
+    snprintf(req_id_hdr, sizeof(req_id_hdr), "Ax-Request-Id: %s", req_id);
 
     const char* headers[] = {
         auth_hdr, ua_hdr,
         "Ax-Request-Device: samsung",
         "Ax-Request-Device-Model: SM-N935F",
         "Ax-Substype: PREPAID",
-        fp_hdr, dev_id, req_at
+        fp_hdr, dev_id_hdr, req_at, req_id_hdr
     };
-    struct HttpResponse* response = http_get(url, headers, 8);
+    struct HttpResponse* response = http_get(url, headers, 9, NULL);
     cJSON* result = NULL;
     if (response && response->body && strlen(response->body) > 0)
         result = cJSON_Parse(response->body);
     free_http_response(response);
+    free(fp);
+    free(dev_id);
     return result;
 }
 
+/* -------------------------------------------------------------------------
+ * API: Submit OTP
+ * ------------------------------------------------------------------------- */
 cJSON* submit_otp(const char* base_ciam_url, const char* basic_auth, const char* ua,
                   const char* ax_api_sig_key, const char* number, const char* otp) {
     char url[512];
@@ -173,15 +255,17 @@ cJSON* submit_otp(const char* base_ciam_url, const char* basic_auth, const char*
     char* fp = generate_ax_fingerprint(number);
     char fp_hdr[1024];
     snprintf(fp_hdr, sizeof(fp_hdr), "Ax-Fingerprint: %s", fp);
-    free(fp);
+    char* dev_id = generate_ax_device_id(number);
+    char dev_id_hdr[256];
+    snprintf(dev_id_hdr, sizeof(dev_id_hdr), "Ax-Device-Id: %s", dev_id);
     char* ts_hdr = get_timestamp_header();
     char req_at[128];
     snprintf(req_at, sizeof(req_at), "Ax-Request-At: %s", ts_hdr);
     free(ts_hdr);
-    char req_id[128];
-    snprintf(req_id, sizeof(req_id), "Ax-Request-Id: ax-req-%ld", time(NULL));
-    char dev_id[128];
-    snprintf(dev_id, sizeof(dev_id), "Ax-Device-Id: a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6");
+    char req_id[64];
+    generate_uuid_v4(req_id);
+    char req_id_hdr[128];
+    snprintf(req_id_hdr, sizeof(req_id_hdr), "Ax-Request-Id: %s", req_id);
 
     const char* headers[] = {
         "Content-Type: application/x-www-form-urlencoded",
@@ -189,7 +273,7 @@ cJSON* submit_otp(const char* base_ciam_url, const char* basic_auth, const char*
         "Ax-Request-Device: samsung",
         "Ax-Request-Device-Model: SM-N935F",
         "Ax-Substype: PREPAID",
-        fp_hdr, dev_id, req_at, req_id
+        fp_hdr, dev_id_hdr, req_at, req_id_hdr
     };
 
     struct HttpResponse* response = http_post(url, headers, 11, payload);
@@ -199,5 +283,7 @@ cJSON* submit_otp(const char* base_ciam_url, const char* basic_auth, const char*
     free_http_response(response);
     free(ts_for_sign);
     free(signature);
+    free(fp);
+    free(dev_id);
     return result;
 }
