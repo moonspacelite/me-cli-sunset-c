@@ -8,48 +8,81 @@
 #include "../include/service/crypto_aes.h"
 #include "../include/service/crypto_helper.h"
 
+#define TZ_OFFSET_SEC (7 * 3600)
+
 static long long get_current_time_ms() { 
-    struct timeval tv; gettimeofday(&tv, NULL);
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
     return (long long)(tv.tv_sec) * 1000 + (tv.tv_usec / 1000); 
 }
 
 static void generate_uuid(char *out) { 
     srand(time(NULL));
-    sprintf(out, "%08x-%04x-%04x-%04x-%08x%04x", rand(), rand() & 0xffff, ((rand() & 0x0fff) | 0x4000), (rand() & 0x3fff) | 0x8000, rand(), rand() & 0xffff);
+    sprintf(out, "%08x-%04x-%04x-%04x-%08x%04x",
+            rand(), rand() & 0xffff,
+            ((rand() & 0x0fff) | 0x4000),
+            (rand() & 0x3fff) | 0x8000,
+            rand(), rand() & 0xffff);
 }
 
+// Timestamp ala Java dengan zona +0700, portabel tanpa tm_gmtoff
 static void get_java_like_timestamp(char *out) {
-    struct timeval tv; gettimeofday(&tv, NULL); struct tm *tinfo = localtime(&tv.tv_sec);
-    char tz_sign = '+'; long tz_offset = tinfo->tm_gmtoff;
-    if (tz_offset < 0) { tz_sign = '-'; tz_offset = -tz_offset; }
-    sprintf(out, "%04d-%02d-%02dT%02d:%02d:%02d.%03d%c%02d:%02d", tinfo->tm_year + 1900, tinfo->tm_mon + 1, tinfo->tm_mday, tinfo->tm_hour, tinfo->tm_min, tinfo->tm_sec, (int)(tv.tv_usec / 1000), tz_sign, (int)(tz_offset / 3600), (int)((tz_offset % 3600) / 60));
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    time_t t = tv.tv_sec + TZ_OFFSET_SEC;
+    struct tm *tm = gmtime(&t);
+    int ms = tv.tv_usec / 1000;
+    sprintf(out, "%04d-%02d-%02dT%02d:%02d:%02d.%03d+0700",
+            tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+            tm->tm_hour, tm->tm_min, tm->tm_sec, ms);
 }
 
-cJSON* send_api_request(const char* base_url, const char* api_key, const char* xdata_key, const char* api_secret, const char* path, cJSON* payload_dict, const char* id_token, const char* method, const char* custom_signature) {
+cJSON* send_api_request(const char* base_url, const char* api_key, const char* xdata_key,
+                        const char* api_secret, const char* path, cJSON* payload_dict,
+                        const char* id_token, const char* method, const char* custom_signature) {
     char* plain_body = cJSON_PrintUnformatted(payload_dict);
-    long long xtime = get_current_time_ms(); long sig_time_sec = (long)(xtime / 1000);
+    long long xtime = get_current_time_ms();
+    long sig_time_sec = (long)(xtime / 1000);
     char* xdata = encrypt_xdata(plain_body, xtime, xdata_key);
-    char* x_sig = custom_signature ? strdup(custom_signature) : make_x_signature(api_secret, id_token, method, path, sig_time_sec);
-    
+    char* x_sig = custom_signature ? strdup(custom_signature)
+                                   : make_x_signature(api_secret, id_token, method, path, sig_time_sec);
+
     cJSON* final_body_json = cJSON_CreateObject();
     cJSON_AddStringToObject(final_body_json, "xdata", xdata);
     cJSON_AddNumberToObject(final_body_json, "xtime", xtime);
     char* final_body_str = cJSON_PrintUnformatted(final_body_json);
-    
-    char uuid_str[37]; generate_uuid(uuid_str); char time_str[35]; get_java_like_timestamp(time_str);
-    char sig_time_str[20]; sprintf(sig_time_str, "%ld", sig_time_sec);
-    
-    char header_auth[4096]; snprintf(header_auth, sizeof(header_auth), "Authorization: Bearer %s", id_token);
-    char header_api_key[128]; snprintf(header_api_key, sizeof(header_api_key), "x-api-key: %s", api_key);
-    char header_sig_time[64]; snprintf(header_sig_time, sizeof(header_sig_time), "x-signature-time: %s", sig_time_str);
-    char header_sig[512]; snprintf(header_sig, sizeof(header_sig), "x-signature: %s", x_sig);
-    char header_req_id[128]; snprintf(header_req_id, sizeof(header_req_id), "x-request-id: %s", uuid_str);
-    char header_req_at[128]; snprintf(header_req_at, sizeof(header_req_at), "x-request-at: %s", time_str);
-    
-    const char* headers[] = { "Content-Type: application/json; charset=utf-8", "User-Agent: myXL / 8.9.0(1202); com.android.vending; (samsung; SM-N935F; SDK 33; Android 13)", "x-hv: v3", "x-version-app: 8.9.0", header_auth, header_api_key, header_sig_time, header_sig, header_req_id, header_req_at };
-    char url[512]; snprintf(url, sizeof(url), "%s/%s", base_url, path);
+
+    char uuid_str[37];
+    generate_uuid(uuid_str);
+    char time_str[35];
+    get_java_like_timestamp(time_str);
+    char sig_time_str[20];
+    sprintf(sig_time_str, "%ld", sig_time_sec);
+
+    char header_auth[4096];
+    snprintf(header_auth, sizeof(header_auth), "Authorization: Bearer %s", id_token);
+    char header_api_key[128];
+    snprintf(header_api_key, sizeof(header_api_key), "x-api-key: %s", api_key);
+    char header_sig_time[64];
+    snprintf(header_sig_time, sizeof(header_sig_time), "x-signature-time: %s", sig_time_str);
+    char header_sig[512];
+    snprintf(header_sig, sizeof(header_sig), "x-signature: %s", x_sig);
+    char header_req_id[128];
+    snprintf(header_req_id, sizeof(header_req_id), "x-request-id: %s", uuid_str);
+    char header_req_at[128];
+    snprintf(header_req_at, sizeof(header_req_at), "x-request-at: %s", time_str);
+
+    const char* headers[] = {
+        "Content-Type: application/json; charset=utf-8",
+        "User-Agent: myXL / 8.9.0(1202); com.android.vending; (samsung; SM-N935F; SDK 33; Android 13)",
+        "x-hv: v3",
+        "x-version-app: 8.9.0",
+        header_auth, header_api_key, header_sig_time, header_sig, header_req_id, header_req_at
+    };
+    char url[512];
+    snprintf(url, sizeof(url), "%s/%s", base_url, path);
     struct HttpResponse* response = http_post(url, headers, 10, final_body_str);
-    
+
     cJSON* result = NULL;
     if (response && response->body && strlen(response->body) > 0) {
         cJSON* resp_json = cJSON_Parse(response->body);
@@ -57,44 +90,64 @@ cJSON* send_api_request(const char* base_url, const char* api_key, const char* x
             cJSON* resp_xdata = cJSON_GetObjectItem(resp_json, "xdata");
             cJSON* resp_xtime = cJSON_GetObjectItem(resp_json, "xtime");
             if (resp_xdata && resp_xtime) {
-                char* decrypted = decrypt_xdata(resp_xdata->valuestring, (long long)resp_xtime->valuedouble, xdata_key);
-                if (decrypted) { result = cJSON_Parse(decrypted); free(decrypted); }
-            } else { result = cJSON_Duplicate(resp_json, 1); }
+                char* decrypted = decrypt_xdata(resp_xdata->valuestring,
+                                                (long long)resp_xtime->valuedouble, xdata_key);
+                if (decrypted) {
+                    result = cJSON_Parse(decrypted);
+                    free(decrypted);
+                }
+            } else {
+                result = cJSON_Duplicate(resp_json, 1);
+            }
             cJSON_Delete(resp_json);
         }
     }
-    free(plain_body); free(xdata); free(x_sig); cJSON_Delete(final_body_json); free(final_body_str); free_http_response(response);
+    free(plain_body);
+    free(xdata);
+    free(x_sig);
+    cJSON_Delete(final_body_json);
+    free(final_body_str);
+    free_http_response(response);
     return result;
 }
 
-cJSON* get_profile(const char* base, const char* api_key, const char* xdata, const char* sec, const char* id_token, const char* access_token) { 
+cJSON* get_profile(const char* base, const char* api_key, const char* xdata, const char* sec,
+                   const char* id_token, const char* access_token) { 
     cJSON* p = cJSON_CreateObject();
     cJSON_AddStringToObject(p, "access_token", access_token); 
     cJSON_AddStringToObject(p, "app_version", "8.9.0"); 
     cJSON_AddBoolToObject(p, "is_enterprise", 0); 
     cJSON_AddStringToObject(p, "lang", "en");
     cJSON* res = send_api_request(base, api_key, xdata, sec, "api/v8/profile", p, id_token, "POST", NULL); 
-    cJSON_Delete(p); return res;
+    cJSON_Delete(p);
+    return res;
 }
 
-cJSON* get_balance(const char* base, const char* api_key, const char* xdata, const char* sec, const char* id_token) { 
+cJSON* get_balance(const char* base, const char* api_key, const char* xdata, const char* sec,
+                   const char* id_token) { 
     cJSON* p = cJSON_CreateObject();
     cJSON_AddBoolToObject(p, "is_enterprise", 0); 
     cJSON_AddStringToObject(p, "lang", "en"); 
-    cJSON* res = send_api_request(base, api_key, xdata, sec, "api/v8/packages/balance-and-credit", p, id_token, "POST", NULL); 
-    cJSON_Delete(p); return res; 
+    cJSON* res = send_api_request(base, api_key, xdata, sec, "api/v8/packages/balance-and-credit",
+                                  p, id_token, "POST", NULL); 
+    cJSON_Delete(p);
+    return res; 
 }
 
-cJSON* get_quota(const char* base, const char* api_key, const char* xdata, const char* sec, const char* id_token) { 
+cJSON* get_quota(const char* base, const char* api_key, const char* xdata, const char* sec,
+                 const char* id_token) { 
     cJSON* p = cJSON_CreateObject();
     cJSON_AddBoolToObject(p, "is_enterprise", 0); 
     cJSON_AddStringToObject(p, "lang", "en"); 
     cJSON_AddStringToObject(p, "family_member_id", ""); 
-    cJSON* res = send_api_request(base, api_key, xdata, sec, "api/v8/packages/quota-details", p, id_token, "POST", NULL);
-    cJSON_Delete(p); return res; 
+    cJSON* res = send_api_request(base, api_key, xdata, sec, "api/v8/packages/quota-details",
+                                  p, id_token, "POST", NULL);
+    cJSON_Delete(p);
+    return res; 
 }
 
-cJSON* get_package_detail(const char* base, const char* api_key, const char* xdata, const char* sec, const char* id_token, const char* opt_code) { 
+cJSON* get_package_detail(const char* base, const char* api_key, const char* xdata, const char* sec,
+                          const char* id_token, const char* opt_code) { 
     cJSON* p = cJSON_CreateObject();
     cJSON_AddBoolToObject(p, "is_transaction_routine", 0);
     cJSON_AddStringToObject(p, "migration_type", "NONE");
@@ -108,20 +161,28 @@ cJSON* get_package_detail(const char* base, const char* api_key, const char* xda
     cJSON_AddStringToObject(p, "package_option_code", opt_code ? opt_code : "");
     cJSON_AddBoolToObject(p, "is_upsell_pdp", 0);
     cJSON_AddStringToObject(p, "package_variant_code", "");
-    cJSON* res = send_api_request(base, api_key, xdata, sec, "api/v8/xl-stores/options/detail", p, id_token, "POST", NULL);
-    cJSON_Delete(p); return res; 
+    cJSON* res = send_api_request(base, api_key, xdata, sec, "api/v8/xl-stores/options/detail",
+                                  p, id_token, "POST", NULL);
+    cJSON_Delete(p);
+    return res; 
 }
 
-cJSON* get_addons(const char* base, const char* api_key, const char* xdata, const char* sec, const char* id_token, const char* opt_code) { 
+cJSON* get_addons(const char* base, const char* api_key, const char* xdata, const char* sec,
+                  const char* id_token, const char* opt_code) { 
     cJSON* p = cJSON_CreateObject();
     cJSON_AddBoolToObject(p, "is_enterprise", 0);
     cJSON_AddStringToObject(p, "lang", "en");
     cJSON_AddStringToObject(p, "package_option_code", opt_code ? opt_code : "");
-    cJSON* res = send_api_request(base, api_key, xdata, sec, "api/v8/xl-stores/options/addons-pinky-box", p, id_token, "POST", NULL);
-    cJSON_Delete(p); return res; 
+    cJSON* res = send_api_request(base, api_key, xdata, sec,
+                                  "api/v8/xl-stores/options/addons-pinky-box",
+                                  p, id_token, "POST", NULL);
+    cJSON_Delete(p);
+    return res; 
 }
 
-cJSON* get_family(const char* base, const char* api_key, const char* xdata, const char* sec, const char* id_token, const char* family_code, int is_enterprise, const char* migration_type) { 
+cJSON* get_family(const char* base, const char* api_key, const char* xdata, const char* sec,
+                  const char* id_token, const char* family_code, int is_enterprise,
+                  const char* migration_type) { 
     cJSON* p = cJSON_CreateObject();
     cJSON_AddBoolToObject(p, "is_show_tagging_tab", 1);
     cJSON_AddBoolToObject(p, "is_dedicated_event", 1);
@@ -134,11 +195,15 @@ cJSON* get_family(const char* base, const char* api_key, const char* xdata, cons
     cJSON_AddStringToObject(p, "referral_code", "");
     cJSON_AddBoolToObject(p, "is_migration", 0);
     cJSON_AddStringToObject(p, "lang", "en");
-    cJSON* res = send_api_request(base, api_key, xdata, sec, "api/v8/xl-stores/options/list", p, id_token, "POST", NULL); 
-    cJSON_Delete(p); return res;
+    cJSON* res = send_api_request(base, api_key, xdata, sec, "api/v8/xl-stores/options/list",
+                                  p, id_token, "POST", NULL); 
+    cJSON_Delete(p);
+    return res;
 }
 
-cJSON* unsubscribe(const char* base, const char* api_key, const char* xdata_key, const char* sec, const char* id_token, const char* quota_code, const char* prod_subs_type, const char* prod_domain) { 
+cJSON* unsubscribe(const char* base, const char* api_key, const char* xdata_key, const char* sec,
+                   const char* id_token, const char* quota_code, const char* prod_subs_type,
+                   const char* prod_domain) { 
     cJSON* p = cJSON_CreateObject();
     cJSON_AddStringToObject(p, "product_subscription_type", prod_subs_type ? prod_subs_type : "");
     cJSON_AddStringToObject(p, "quota_code", quota_code ? quota_code : "");
@@ -147,11 +212,20 @@ cJSON* unsubscribe(const char* base, const char* api_key, const char* xdata_key,
     cJSON_AddStringToObject(p, "unsubscribe_reason_code", "");
     cJSON_AddStringToObject(p, "lang", "en");
     cJSON_AddStringToObject(p, "family_member_id", "");
-    cJSON* res = send_api_request(base, api_key, xdata_key, sec, "api/v8/packages/unsubscribe", p, id_token, "POST", NULL); 
-    cJSON_Delete(p); return res;
+    cJSON* res = send_api_request(base, api_key, xdata_key, sec, "api/v8/packages/unsubscribe",
+                                  p, id_token, "POST", NULL); 
+    cJSON_Delete(p);
+    return res;
 }
 
-cJSON* execute_balance_purchase(const char* base, const char* key, const char* xdata, const char* sec, const char* enc_key, const char* id, const char* acc, const char* opt_code, int price, const char* name, const char* conf, const char* decoy_opt_code, int decoy_price, const char* decoy_name, const char* decoy_conf, const char* pay_for, int overwrite_amount, int use_decoy_token) {
+cJSON* execute_balance_purchase(const char* base, const char* key, const char* xdata,
+                                const char* sec, const char* enc_key, const char* id,
+                                const char* acc, const char* opt_code, int price,
+                                const char* name, const char* conf,
+                                const char* decoy_opt_code, int decoy_price,
+                                const char* decoy_name, const char* decoy_conf,
+                                const char* pay_for, int overwrite_amount,
+                                int use_decoy_token) {
     const char* pm_target = use_decoy_token ? decoy_opt_code : opt_code;
     const char* pm_conf   = use_decoy_token ? decoy_conf : conf;
 
@@ -164,11 +238,15 @@ cJSON* execute_balance_purchase(const char* base, const char* key, const char* x
     cJSON_AddBoolToObject(pm_p, "is_referral", 0);
     cJSON_AddStringToObject(pm_p, "token_confirmation", pm_conf);
 
-    cJSON* pm_res = send_api_request(base, key, xdata, sec, "payments/api/v8/payment-methods-option", pm_p, id, "POST", NULL); 
+    cJSON* pm_res = send_api_request(base, key, xdata, sec,
+                                     "payments/api/v8/payment-methods-option",
+                                     pm_p, id, "POST", NULL);
     cJSON_Delete(pm_p);
-    
-    if (!pm_res || !cJSON_GetObjectItem(pm_res, "status") || strcmp(cJSON_GetObjectItem(pm_res, "status")->valuestring, "SUCCESS") != 0) return pm_res;
-    
+
+    if (!pm_res || !cJSON_GetObjectItem(pm_res, "status") ||
+        strcmp(cJSON_GetObjectItem(pm_res, "status")->valuestring, "SUCCESS") != 0)
+        return pm_res;
+
     cJSON* pm_data = cJSON_GetObjectItem(pm_res, "data");
     cJSON* t_pay_node = cJSON_GetObjectItem(pm_data, "token_payment");
     cJSON* ts_node = cJSON_GetObjectItem(pm_data, "timestamp");
@@ -176,17 +254,21 @@ cJSON* execute_balance_purchase(const char* base, const char* key, const char* x
         printf("[-] Fatal Error: Key token_payment/timestamp tidak ditemukan dari server.\n");
         return pm_res;
     }
-    const char* t_pay = t_pay_node->valuestring; 
+    const char* t_pay = t_pay_node->valuestring;
     long ts_sign = (long)ts_node->valuedouble;
 
     printf("[*] 2/2 Mengeksekusi transaksi...\n");
     char payment_targets[1024];
-    if (decoy_opt_code) snprintf(payment_targets, sizeof(payment_targets), "%s;%s", opt_code, decoy_opt_code); 
-    else snprintf(payment_targets, sizeof(payment_targets), "%s", opt_code);
+    if (decoy_opt_code)
+        snprintf(payment_targets, sizeof(payment_targets), "%s;%s", opt_code, decoy_opt_code);
+    else
+        snprintf(payment_targets, sizeof(payment_targets), "%s", opt_code);
 
-    char* enc_tok = build_encrypted_field(enc_key); 
+    char* enc_tok = build_encrypted_field(enc_key);
     char* enc_auth = build_encrypted_field(enc_key);
-    char* c_sig = make_x_signature_payment(sec, acc, ts_sign, payment_targets, t_pay, "BALANCE", pay_for, "payments/api/v8/settlement-multipayment");
+    char* c_sig = make_x_signature_payment(sec, acc, ts_sign, payment_targets, t_pay,
+                                           "BALANCE", pay_for,
+                                           "payments/api/v8/settlement-multipayment");
 
     cJSON* set_p = cJSON_CreateObject();
     cJSON_AddNumberToObject(set_p, "total_discount", 0);
@@ -212,7 +294,7 @@ cJSON* execute_balance_purchase(const char* base, const char* key, const char* x
     cJSON_AddNumberToObject(item1, "item_price", price);
     cJSON_AddStringToObject(item1, "token_confirmation", conf);
     cJSON_AddItemToArray(items_arr, item1);
-    
+
     if (decoy_opt_code) {
         cJSON* item2 = cJSON_CreateObject();
         cJSON_AddStringToObject(item2, "item_code", decoy_opt_code);
@@ -221,7 +303,13 @@ cJSON* execute_balance_purchase(const char* base, const char* key, const char* x
         cJSON_AddItemToArray(items_arr, item2);
     }
 
-    cJSON* res = send_api_request(base, key, xdata, sec, "payments/api/v8/settlement-multipayment", set_p, id, "POST", c_sig);
-    free(enc_tok); free(enc_auth); free(c_sig); cJSON_Delete(set_p); cJSON_Delete(pm_res); 
+    cJSON* res = send_api_request(base, key, xdata, sec,
+                                  "payments/api/v8/settlement-multipayment",
+                                  set_p, id, "POST", c_sig);
+    free(enc_tok);
+    free(enc_auth);
+    free(c_sig);
+    cJSON_Delete(set_p);
+    cJSON_Delete(pm_res);
     return res;
 }
