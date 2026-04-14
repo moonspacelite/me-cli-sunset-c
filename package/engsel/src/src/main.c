@@ -197,9 +197,9 @@ cJSON* do_family_bruteforce(const char* B_API, const char* API_KEY, const char* 
 
 cJSON* fetch_decoy_package(const char* subs_type, const char* B_API, const char* API_KEY, const char* XDATA_KEY, const char* X_API_SEC, const char* id_tok) {
     const char* file_name;
-    if (strcmp(subs_type, "PRIOHYBRID") == 0) { file_name = "decoy_data/decoy-priohybrid-balance.json"; }
-    else if (strcmp(subs_type, "PRIORITAS") == 0) { file_name = "decoy_data/decoy-prio-balance.json"; }
-    else { file_name = "decoy_data/decoy-prabayar-balance.json"; }
+    if (strcmp(subs_type, "PRIOHYBRID") == 0) { file_name = "/etc/engsel/decoy_data/decoy-priohybrid-balance.json"; }
+    else if (strcmp(subs_type, "PRIORITAS") == 0) { file_name = "/etc/engsel/decoy_data/decoy-prio-balance.json"; }
+    else { file_name = "/etc/engsel/decoy_data/decoy-prabayar-balance.json"; }
 
     FILE *f = fopen(file_name, "r");
     if (!f) { printf("[-] File konfigurasi %s tidak ditemukan!\n", file_name); return NULL; }
