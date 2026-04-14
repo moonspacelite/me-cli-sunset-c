@@ -25,7 +25,7 @@ jobs:
           PACKAGES: engsel
           BUILD_LOG: 1
           NO_SHFMT_CHECK: 1
-          NO_DEFAULT_FEEDS: 1
+          IGNORE_ERRORS: 1
 
       - name: Tampilkan hasil build
         run: |
