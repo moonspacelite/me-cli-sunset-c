@@ -74,17 +74,17 @@ void clean_html_tags(char *dest, const char *src) {
 }
 
 void save_tokens(cJSON *tokens_arr) {
-    FILE *f = fopen("refresh-tokens.json", "w");
+    FILE *f = fopen("/etc/engsel/refresh-tokens.json", "w");
     if (f) { char *json_str = cJSON_Print(tokens_arr); fprintf(f, "%s\n", json_str); free(json_str); fclose(f); }
 }
 
 void save_active_number() {
-    FILE *f = fopen("active.number", "w");
+    FILE *f = fopen("/etc/engsel/active.number", "w");
     if (f) { fprintf(f, "%.0f\n", active_number); fclose(f); }
 }
 
 void load_active_number(cJSON *tokens_arr) {
-    FILE *f = fopen("active.number", "r");
+    FILE *f = fopen("/etc/engsel/active.number", "r");
     if (f) {
         char buf[32];
         if (fgets(buf, sizeof(buf), f)) {
@@ -339,7 +339,7 @@ void handle_payment_menu(const char* B_CIAM, const char* B_API, const char* B_AU
         else if (strcmp(pay_choice, "99") == 0) { *goto_main_flag = 1; break; } 
         else if (strcmp(pay_choice, "0") == 0) {
             if (bm_info) {
-                FILE* f = fopen("bookmark.json", "r"); cJSON* bm_arr = NULL;
+                FILE* f = fopen("/etc/engsel/bookmark.json", "r"); cJSON* bm_arr = NULL;
                 if (f) {
                     fseek(f, 0, SEEK_END); long fsize = ftell(f); fseek(f, 0, SEEK_SET);
                     if (fsize > 0) { char* jdata = malloc(fsize + 1); fread(jdata, 1, fsize, f); jdata[fsize] = 0; sanitize_json_string(jdata); bm_arr = cJSON_Parse(jdata); free(jdata); }
@@ -348,7 +348,7 @@ void handle_payment_menu(const char* B_CIAM, const char* B_API, const char* B_AU
                 if (!bm_arr || !cJSON_IsArray(bm_arr)) { if (bm_arr) cJSON_Delete(bm_arr); bm_arr = cJSON_CreateArray(); }
                 cJSON* new_bm = cJSON_Duplicate(bm_info, 1);
                 cJSON_AddItemToArray(bm_arr, new_bm);
-                FILE* fw = fopen("bookmark.json", "w");
+                FILE* fw = fopen("/etc/engsel/bookmark.json", "w");
                 if (fw) { char* out = cJSON_Print(bm_arr); fprintf(fw, "%s\n", out); free(out); fclose(fw); 
                     cJSON* oname = cJSON_GetObjectItem(bm_info, "option_name");
                     printf("[+] Paket '%s' berhasil ditambahkan ke Bookmark!\n", oname ? oname->valuestring : "Unknown"); 
@@ -474,7 +474,7 @@ void handle_payment_menu(const char* B_CIAM, const char* B_API, const char* B_AU
 
 int main() {
     srand((unsigned int)time(NULL));
-    load_env(".env");
+    load_env("/etc/engsel/.env");
     const char* B_CIAM = getenv("BASE_CIAM_URL"); const char* B_API = getenv("BASE_API_URL");
     const char* B_AUTH = getenv("BASIC_AUTH"); const char* UA = getenv("UA");
     const char* API_KEY = getenv("API_KEY"); const char* XDATA_KEY = getenv("XDATA_KEY");
@@ -484,7 +484,7 @@ int main() {
     if (!B_CIAM || !B_API || !API_KEY || !XDATA_KEY || !X_API_SEC || !ENC_FIELD_KEY) { printf("[-] Kredensial tidak lengkap di .env!\n"); return 1; }
 
     cJSON *tokens_arr = cJSON_CreateArray();
-    FILE *fp = fopen("refresh-tokens.json", "r");
+    FILE *fp = fopen("/etc/engsel/refresh-tokens.json", "r");
     if (fp) {
         fseek(fp, 0, SEEK_END); long fsize = ftell(fp); fseek(fp, 0, SEEK_SET);
         if (fsize > 0) {
@@ -797,7 +797,7 @@ int main() {
         else if (strcmp(choice, "3") == 0) {
             if (!is_logged_in) { printf("\n[-] Anda harus login terlebih dahulu!\nTekan Enter..."); fflush(stdout); flush_stdin(); continue; }
             
-            FILE *f = fopen("hot_data/hot.json", "r");
+            FILE *f = fopen("/etc/engsel/hot_data/hot.json", "r");
             if (!f) { printf("\n[-] File hot_data/hot.json tidak ditemukan!\nTekan Enter..."); fflush(stdout); flush_stdin(); continue; }
             fseek(f, 0, SEEK_END); long fsize = ftell(f); fseek(f, 0, SEEK_SET);
             char *json_data = malloc(fsize + 1); fread(json_data, 1, fsize, f); fclose(f); json_data[fsize] = 0;
@@ -1228,7 +1228,7 @@ int main() {
 
             int goto_main = 0;
             while (1) {
-                FILE *fbm = fopen("bookmark.json", "r");
+                FILE *fbm = fopen("/etc/engsel/bookmark.json", "r");
                 if (!fbm) { printf("\n[-] Belum ada bookmark tersimpan.\nTekan Enter..."); fflush(stdout); flush_stdin(); break; }
                 fseek(fbm, 0, SEEK_END); long fbm_size = ftell(fbm); fseek(fbm, 0, SEEK_SET);
                 char *bm_json = malloc(fbm_size + 1); fread(bm_json, 1, fbm_size, fbm); fclose(fbm); bm_json[fbm_size] = 0;
@@ -1298,7 +1298,7 @@ int main() {
                                 char conf_del[8] = {0};
                                 if (fgets(conf_del, sizeof(conf_del), stdin) != NULL && (conf_del[0] == 'y' || conf_del[0] == 'Y')) {
                                     cJSON_DeleteItemFromArray(bm_arr, del_idx);
-                                    FILE *fw = fopen("bookmark.json", "w");
+                                    FILE *fw = fopen("/etc/engsel/bookmark.json", "w");
                                     if (fw) { char* out = cJSON_Print(bm_arr); fprintf(fw, "%s\n", out); free(out); fclose(fw); }
                                     printf("[+] Bookmark dihapus!\n");
                                 } else {
