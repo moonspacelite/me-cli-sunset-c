@@ -1,10 +1,10 @@
 # engsel — CLI Client (C port)
 
+```Port dari `me-cli-sunset` Python ke C, dikompilasi untuk OpenWrt.```
+
 # dependensi yang dibutuhkan
 
 ```libcurl libopenssl ca-bundle```
-
-```Port dari `me-cli-sunset` Python ke C, dikompilasi untuk OpenWrt.```
 
 ## Cara install di router
 
