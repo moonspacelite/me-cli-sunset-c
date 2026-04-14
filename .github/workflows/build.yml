@@ -1,4 +1,4 @@
-name: Build engsel — IPK (aarch64) + IPK (arm_cortex-a7)
+name: Build engsel — IPK aarch64_generic
 
 on:
   push:
@@ -9,10 +9,6 @@ on:
 
 jobs:
 
-  # ──────────────────────────────────────────────────────────────────
-  # JOB 1: .ipk untuk OpenWrt 24.10 — aarch64_generic
-  # Install: opkg install --force-checksum /tmp/engsel_*.ipk
-  # ──────────────────────────────────────────────────────────────────
   build-ipk-aarch64:
     name: IPK aarch64_generic (OpenWrt 24.10)
     runs-on: ubuntu-latest
@@ -28,10 +24,12 @@ jobs:
           FEED_DIR: ${{ github.workspace }}/package
           PACKAGES: engsel
           BUILD_LOG: 1
-          # NO_DEFAULT_FEEDS tidak dipakai — agar libcurl & libopenssl tersedia
+          NO_SHFMT_CHECK: 1
 
       - name: Tampilkan hasil build
-        run: find bin/ -name "*.ipk" 2>/dev/null || echo "Tidak ada IPK ditemukan"
+        run: |
+          echo "=== Isi bin/ ==="
+          find bin/ -type f 2>/dev/null || echo "bin/ tidak ada"
 
       - name: Upload IPK
         uses: actions/upload-artifact@v4
@@ -47,81 +45,3 @@ jobs:
           name: log-aarch64
           path: logs/
           retention-days: 7
-
-  # ──────────────────────────────────────────────────────────────────
-  # JOB 2: .ipk untuk OpenWrt 24.10 — arm_cortex-a7_neon-vfpv4
-  # SDK 25.x belum tersedia di Docker Hub → pakai 24.10.0
-  # Install: opkg install --force-checksum /tmp/engsel_*.ipk
-  # ──────────────────────────────────────────────────────────────────
-  build-ipk-arm-cortex-a7:
-    name: IPK arm_cortex-a7_neon-vfpv4 (OpenWrt 24.10)
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Build via OpenWrt SDK
-        uses: openwrt/gh-action-sdk@v5
-        env:
-          ARCH: arm_cortex-a7_neon-vfpv4-24.10.0
-          FEED_DIR: ${{ github.workspace }}/package
-          PACKAGES: engsel
-          BUILD_LOG: 1
-
-      - name: Tampilkan hasil build
-        run: find bin/ -name "*.ipk" 2>/dev/null || echo "Tidak ada IPK ditemukan"
-
-      - name: Upload IPK
-        uses: actions/upload-artifact@v4
-        with:
-          name: engsel-arm_cortex-a7-openwrt24
-          path: bin/packages/arm_cortex-a7_neon-vfpv4/*/engsel_*.ipk
-          retention-days: 30
-
-      - name: Upload log (jika gagal)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: log-arm-cortex-a7
-          path: logs/
-          retention-days: 7
-
-  # ──────────────────────────────────────────────────────────────────
-  # JOB 3: GitHub Release — hanya saat push tag v*
-  # ──────────────────────────────────────────────────────────────────
-  release:
-    name: GitHub Release
-    runs-on: ubuntu-latest
-    needs: [build-ipk-aarch64, build-ipk-arm-cortex-a7]
-    if: startsWith(github.ref, 'refs/tags/v')
-
-    steps:
-      - name: Download semua artifact
-        uses: actions/download-artifact@v4
-        with:
-          path: release-files/
-
-      - name: List isi release
-        run: find release-files/ -type f
-
-      - name: Buat GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release-files/**/*.ipk
-          body: |
-            ## engsel ${{ github.ref_name }}
-
-            ### Cara Install di Router
-
-            **OpenWrt 24.10 aarch64_generic:**
-            ```sh
-            opkg install --force-checksum /tmp/engsel_*_aarch64_generic.ipk
-            ```
-
-            **OpenWrt 24.10 arm_cortex-a7_neon-vfpv4:**
-            ```sh
-            opkg install --force-checksum /tmp/engsel_*_arm_cortex-a7_neon-vfpv4.ipk
-            ```
-
-            Setelah install, ketik `engsel` di terminal.
