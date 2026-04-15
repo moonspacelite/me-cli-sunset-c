@@ -190,7 +190,7 @@ cJSON* request_otp(const char* base_ciam_url, const char* basic_auth, const char
         "Ax-Substype: PREPAID",
         fp_hdr, dev_id_hdr, req_at, req_id_hdr
     };
-    struct HttpResponse* response = http_get(url, headers, 9, NULL);
+    struct HttpResponse* response = http_get(url, headers, 9);
     cJSON* result = NULL;
     if (response && response->body && strlen(response->body) > 0)
         result = cJSON_Parse(response->body);
