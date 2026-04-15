@@ -473,7 +473,7 @@ void handle_payment_menu(const char* B_CIAM, const char* B_API, const char* B_AU
 }
 
 int main() {
-    srand((unsigned int)time(NULL));
+    srandom((unsigned int)time(NULL));   // <-- PERUBAHAN: srand -> srandom
     load_env("/etc/engsel/.env");
     const char* B_CIAM = getenv("BASE_CIAM_URL"); const char* B_API = getenv("BASE_API_URL");
     const char* B_AUTH = getenv("BASIC_AUTH"); const char* UA = getenv("UA");
@@ -743,7 +743,8 @@ int main() {
                             char conf[10];
                             if (fgets(conf, sizeof(conf), stdin) && (conf[0] == 'y' || conf[0] == 'Y')) {
                                 printf("[*] Membatalkan langganan paket %s...\n", active_pkgs[del_idx].name);
-                                cJSON* u_res = unsubscribe(B_API, API_KEY, XDATA_KEY, X_API_SEC, id_tok, active_pkgs[del_idx].quota_code, active_pkgs[del_idx].prod_subs_type, active_pkgs[del_idx].prod_domain);
+                                // PERUBAHAN: tambahkan acc_tok sebagai parameter ke-6
+                                cJSON* u_res = unsubscribe(B_API, API_KEY, XDATA_KEY, X_API_SEC, id_tok, acc_tok, active_pkgs[del_idx].quota_code, active_pkgs[del_idx].prod_subs_type, active_pkgs[del_idx].prod_domain);
                                 if (u_res && cJSON_GetObjectItem(u_res, "code") && strcmp(cJSON_GetObjectItem(u_res, "code")->valuestring, "000") == 0) {
                                     printf("[+] Berhasil berhenti langganan paket.\n");
                                 } else {

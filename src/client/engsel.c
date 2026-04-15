@@ -10,9 +10,6 @@
 
 #define TZ_OFFSET_SEC (7 * 3600)
 
-/* -------------------------------------------------------------------------
- * Helper: random bytes (sama seperti di ciam.c)
- * ------------------------------------------------------------------------- */
 static int get_random_bytes(unsigned char *buf, size_t len) {
     FILE *f = fopen("/dev/urandom", "rb");
     if (!f) return -1;
@@ -21,14 +18,11 @@ static int get_random_bytes(unsigned char *buf, size_t len) {
     return (read == len) ? 0 : -1;
 }
 
-/* -------------------------------------------------------------------------
- * UUID v4 acak
- * ------------------------------------------------------------------------- */
 static void generate_uuid(char *out) {
     unsigned char rand[16];
     if (get_random_bytes(rand, sizeof(rand)) != 0) {
-        srand(time(NULL));
-        for (int i = 0; i < 16; i++) rand[i] = rand() & 0xFF;
+        srandom(time(NULL));
+        for (int i = 0; i < 16; i++) rand[i] = random() & 0xFF;
     }
     rand[6] = (rand[6] & 0x0F) | 0x40;
     rand[8] = (rand[8] & 0x3F) | 0x80;
@@ -41,9 +35,6 @@ static void generate_uuid(char *out) {
             rand[10], rand[11], rand[12], rand[13], rand[14], rand[15]);
 }
 
-/* -------------------------------------------------------------------------
- * Timestamp Java‑like dengan zona +0700 (tanpa tm_gmtoff)
- * ------------------------------------------------------------------------- */
 static void get_java_like_timestamp(char *out) {
     struct timeval tv;
     gettimeofday(&tv, NULL);
@@ -61,9 +52,6 @@ static long long get_current_time_ms() {
     return (long long)(tv.tv_sec) * 1000 + (tv.tv_usec / 1000); 
 }
 
-/* -------------------------------------------------------------------------
- * send_api_request (tidak diubah selain UUID dan timestamp)
- * ------------------------------------------------------------------------- */
 cJSON* send_api_request(const char* base_url, const char* api_key, const char* xdata_key,
                         const char* api_secret, const char* path, cJSON* payload_dict,
                         const char* id_token, const char* method, const char* custom_signature) {
@@ -138,9 +126,6 @@ cJSON* send_api_request(const char* base_url, const char* api_key, const char* x
     return result;
 }
 
-/* -------------------------------------------------------------------------
- * Fungsi‑fungsi API (tidak diubah dari versi sebelumnya)
- * ------------------------------------------------------------------------- */
 cJSON* get_profile(const char* base, const char* api_key, const char* xdata, const char* sec,
                    const char* id_token, const char* access_token) { 
     cJSON* p = cJSON_CreateObject();
@@ -232,9 +217,11 @@ cJSON* get_family(const char* base, const char* api_key, const char* xdata, cons
 }
 
 cJSON* unsubscribe(const char* base, const char* api_key, const char* xdata_key, const char* sec,
-                   const char* id_token, const char* quota_code, const char* prod_subs_type,
+                   const char* id_token, const char* access_token,
+                   const char* quota_code, const char* prod_subs_type,
                    const char* prod_domain) { 
     cJSON* p = cJSON_CreateObject();
+    cJSON_AddStringToObject(p, "access_token", access_token);
     cJSON_AddStringToObject(p, "product_subscription_type", prod_subs_type ? prod_subs_type : "");
     cJSON_AddStringToObject(p, "quota_code", quota_code ? quota_code : "");
     cJSON_AddStringToObject(p, "product_domain", prod_domain ? prod_domain : "");
@@ -255,9 +242,16 @@ cJSON* execute_balance_purchase(const char* base, const char* key, const char* x
                                 const char* decoy_opt_code, int decoy_price,
                                 const char* decoy_name, const char* decoy_conf,
                                 const char* pay_for, int overwrite_amount,
-                                int use_decoy_token) {
-    const char* pm_target = use_decoy_token ? decoy_opt_code : opt_code;
-    const char* pm_conf   = use_decoy_token ? decoy_conf : conf;
+                                int token_confirmation_idx) {
+    const char* pm_target;
+    const char* pm_conf;
+    if (token_confirmation_idx == 1 && decoy_opt_code) {
+        pm_target = decoy_opt_code;
+        pm_conf   = decoy_conf;
+    } else {
+        pm_target = opt_code;
+        pm_conf   = conf;
+    }
 
     printf("\n[*] 1/2 Mengambil token pembayaran...\n");
     cJSON* pm_p = cJSON_CreateObject();

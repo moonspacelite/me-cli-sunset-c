@@ -11,9 +11,6 @@
 
 #define TZ_OFFSET_SEC (7 * 3600)
 
-/* -------------------------------------------------------------------------
- * Helper: random bytes dari /dev/urandom (fallback ke rand() jika gagal)
- * ------------------------------------------------------------------------- */
 static int get_random_bytes(unsigned char *buf, size_t len) {
     FILE *f = fopen("/dev/urandom", "rb");
     if (!f) return -1;
@@ -22,17 +19,12 @@ static int get_random_bytes(unsigned char *buf, size_t len) {
     return (read == len) ? 0 : -1;
 }
 
-/* -------------------------------------------------------------------------
- * UUID v4 yang benar‑benar acak (RFC 4122)
- * ------------------------------------------------------------------------- */
 static void generate_uuid_v4(char *out) {
     unsigned char rand[16];
     if (get_random_bytes(rand, sizeof(rand)) != 0) {
-        // fallback pseudo‑random
-        srand(time(NULL));
-        for (int i = 0; i < 16; i++) rand[i] = rand() & 0xFF;
+        srandom(time(NULL));
+        for (int i = 0; i < 16; i++) rand[i] = random() & 0xFF;
     }
-    // Set versi 4 dan varian 1
     rand[6] = (rand[6] & 0x0F) | 0x40;
     rand[8] = (rand[8] & 0x3F) | 0x80;
 
@@ -44,9 +36,6 @@ static void generate_uuid_v4(char *out) {
             rand[10], rand[11], rand[12], rand[13], rand[14], rand[15]);
 }
 
-/* -------------------------------------------------------------------------
- * MD5 hex string
- * ------------------------------------------------------------------------- */
 static char* md5_hex(const char *input) {
     unsigned char digest[MD5_DIGEST_LENGTH];
     MD5((unsigned char*)input, strlen(input), digest);
@@ -56,9 +45,6 @@ static char* md5_hex(const char *input) {
     return hex;
 }
 
-/* -------------------------------------------------------------------------
- * Ax-Device-Id = MD5 dari plain fingerprint
- * ------------------------------------------------------------------------- */
 static char* generate_ax_device_id(const char* msisdn) {
     const char* key_str = getenv("AX_FP_KEY");
     if (!key_str) return strdup("dummy_device_id");
@@ -69,9 +55,6 @@ static char* generate_ax_device_id(const char* msisdn) {
     return md5_hex(plain);
 }
 
-/* -------------------------------------------------------------------------
- * Timestamp header (mundur 5 menit) +0700
- * ------------------------------------------------------------------------- */
 static char* get_timestamp_header(void) {
     time_t now = time(NULL) - 300 + TZ_OFFSET_SEC;
     struct tm *t = gmtime(&now);
@@ -80,9 +63,6 @@ static char* get_timestamp_header(void) {
     return strdup(buf);
 }
 
-/* -------------------------------------------------------------------------
- * Timestamp untuk signature (saat ini) +0700
- * ------------------------------------------------------------------------- */
 static char* get_ts_for_signature(void) {
     time_t now = time(NULL) + TZ_OFFSET_SEC;
     struct tm *t = gmtime(&now);
@@ -91,9 +71,6 @@ static char* get_ts_for_signature(void) {
     return strdup(buf);
 }
 
-/* -------------------------------------------------------------------------
- * Ax-Fingerprint (AES‑256‑CBC)
- * ------------------------------------------------------------------------- */
 static char* generate_ax_fingerprint(const char* msisdn) {
     const char* key_str = getenv("AX_FP_KEY");
     if (!key_str) return strdup("dummy");
@@ -129,9 +106,6 @@ static char* generate_ax_fingerprint(const char* msisdn) {
     return b64;
 }
 
-/* -------------------------------------------------------------------------
- * Ax-Api-Signature (HMAC‑SHA256 lalu Base64)
- * ------------------------------------------------------------------------- */
 static char* generate_ax_api_signature(const char* ts_for_sign, const char* contact,
                                        const char* code, const char* contact_type, const char* key_str) {
     if (!key_str) return strdup("dummy");
@@ -159,9 +133,6 @@ static char* generate_ax_api_signature(const char* ts_for_sign, const char* cont
     return b64;
 }
 
-/* -------------------------------------------------------------------------
- * API: Refresh Token
- * ------------------------------------------------------------------------- */
 cJSON* get_new_token(const char* base_ciam_url, const char* basic_auth, const char* ua,
                      const char* refresh_token) {
     char url[512];
@@ -188,9 +159,6 @@ cJSON* get_new_token(const char* base_ciam_url, const char* basic_auth, const ch
     return result;
 }
 
-/* -------------------------------------------------------------------------
- * API: Request OTP
- * ------------------------------------------------------------------------- */
 cJSON* request_otp(const char* base_ciam_url, const char* basic_auth, const char* ua,
                    const char* number) {
     char url[512];
@@ -232,9 +200,6 @@ cJSON* request_otp(const char* base_ciam_url, const char* basic_auth, const char
     return result;
 }
 
-/* -------------------------------------------------------------------------
- * API: Submit OTP
- * ------------------------------------------------------------------------- */
 cJSON* submit_otp(const char* base_ciam_url, const char* basic_auth, const char* ua,
                   const char* ax_api_sig_key, const char* number, const char* otp) {
     char url[512];
