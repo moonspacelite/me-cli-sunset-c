@@ -1,0 +1,71 @@
+name: Build engsel — IPK multiple targets
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-ipk-matrix:
+    name: IPK ${{ matrix.target.arch }} (OpenWrt 24.10)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { arch: aarch64_cortex-a53, folder: aarch64_cortex-a53, artifact: engsel-aarch64_cortex-a53-openwrt24 }
+          - { arch: aarch64_cortex-a72, folder: aarch64_cortex-a72, artifact: engsel-aarch64_cortex-a72-openwrt24 }
+          - { arch: aarch64_cortex-a76, folder: aarch64_cortex-a76, artifact: engsel-aarch64_cortex-a76-openwrt24 }
+          - { arch: aarch64_generic, folder: aarch64_generic, artifact: engsel-aarch64_generic-openwrt24 }
+          - { arch: arm_cortex-a7, folder: arm_cortex-a7, artifact: engsel-arm_cortex-a7-openwrt24 }
+          - { arch: arm_cortex-a7_neon-vfpv4, folder: arm_cortex-a7_neon-vfpv4, artifact: engsel-arm_cortex-a7_neon-vfpv4-openwrt24 }
+          - { arch: x86_64, folder: x86_64, artifact: engsel-x86_64-openwrt24 }
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Build via OpenWrt SDK
+        uses: openwrt/gh-action-sdk@v5
+        env:
+          ARCH: ${{ matrix.target.arch }}-24.10.0
+          FEED_DIR: ${{ github.workspace }}/package
+          PACKAGES: engsel
+          BUILD_LOG: 1
+          NO_SHFMT_CHECK: 1
+          IGNORE_ERRORS: 1
+
+      - name: Tampilkan hasil build
+        run: |
+          echo "=== Isi bin/ ==="
+          find bin/ -type f 2>/dev/null || echo "bin/ tidak ada"
+
+      - name: Upload IPK sebagai artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target.artifact }}
+          path: bin/packages/${{ matrix.target.folder }}/*/engsel_*.ipk
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Upload ke GitHub Release (jika tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: bin/packages/${{ matrix.target.folder }}/*/engsel_*.ipk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload log (jika gagal)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: log-${{ matrix.target.folder }}
+          path: logs/
+          retention-days: 7
